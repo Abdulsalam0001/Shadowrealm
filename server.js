@@ -249,7 +249,8 @@ app.patch("/api/admin/orders/:id/review", admin, async (req, res) => {
   await prisma.cryptoPayment.update({ where: { id: order.payment.id }, data: { status: "REVIEW" } });
   res.json({ order: publicOrder(updated) });
 });
-app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));\napp.get("/admin", (_req, res) => res.sendFile(path.join(__dirname, "admin.html")));
+app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));
+app.get("/admin", (_req, res) => res.sendFile(path.join(__dirname, "admin.html")));
 app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ error: "Unexpected server error." }); });
 
 async function main() {
