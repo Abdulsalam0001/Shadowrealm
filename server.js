@@ -42,6 +42,9 @@ const seedProducts = [
 
 const ADMIN_SESSION_COOKIE = "shadowrealm_admin";
 const ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60;
+const CUSTOMER_SESSION_COOKIE = "shadowrealm_customer";
+const CUSTOMER_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+const CUSTOMER_SESSION_SECRET = process.env.CUSTOMER_SESSION_SECRET || "";
 
 function safeEqualText(left, right) {
   const a = Buffer.from(String(left));
@@ -80,6 +83,56 @@ function admin(req, res, next) {
   if (!validAdminSession(req)) return res.status(401).json({ error: "Please log in to the admin panel." });
   next();
 }
+function customerCookie(req) {
+  const match = String(req.headers.cookie || "").match(/(?:^|;\\s*)shadowrealm_customer=([^;]+)/);
+  if (!match) return "";
+  try { return decodeURIComponent(match[1]); } catch { return ""; }
+}
+function signCustomerPayload(payload) {
+  return crypto.createHmac("sha256", CUSTOMER_SESSION_SECRET).update(payload).digest("hex");
+}
+function setCustomerCookie(res, token, maxAge) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", token
+    ? `${CUSTOMER_SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`
+    : `${CUSTOMER_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
+}
+function createCustomerSession(customer) {
+  const payload = Buffer.from(JSON.stringify({ customerId: customer.id, exp: Math.floor(Date.now() / 1000) + CUSTOMER_SESSION_TTL_SECONDS })).toString("base64url");
+  return payload + "." + signCustomerPayload(payload);
+}
+async function currentCustomer(req) {
+  if (!CUSTOMER_SESSION_SECRET || CUSTOMER_SESSION_SECRET.length < 32) return null;
+  const token = customerCookie(req), separator = token.lastIndexOf(".");
+  if (separator < 1) return null;
+  const payload = token.slice(0, separator);
+  if (!safeEqualText(token.slice(separator + 1), signCustomerPayload(payload))) return null;
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!session.customerId || !Number.isFinite(session.exp) || session.exp <= Math.floor(Date.now() / 1000)) return null;
+    return await prisma.customer.findUnique({ where: { id: session.customerId }, select: { id: true, email: true } });
+  } catch { return null; }
+}
+async function customerAuth(req, res, next) {
+  try {
+    const customer = await currentCustomer(req);
+    if (!customer) return res.status(401).json({ error: "Sign in to view the members-only catalogue." });
+    req.customer = customer;
+    next();
+  } catch (err) { next(err); }
+}
+function passwordHash(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  return salt + ":" + crypto.scryptSync(password, salt, 64).toString("hex");
+}
+function verifyPassword(password, stored) {
+  const [salt, hex] = String(stored || "").split(":");
+  if (!salt || !hex) return false;
+  const expected = Buffer.from(hex, "hex"), actual = crypto.scryptSync(password, salt, expected.length);
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+function validEmail(email) { return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) && email.length <= 254; }
+
 function amountToAtomic(ngn, rate, decimals) {
   if (!rate || !/^\d+(\.\d+)?$/.test(rate) || Number(rate) <= 0) throw new Error("Crypto rate is not configured.");
   const [whole, fraction = ""] = rate.split(".");
@@ -177,16 +230,47 @@ async function tryAutoFulfillment(orderId) {
 }
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, databaseConfigured: Boolean(process.env.DATABASE_URL), crypto: { BTC: Boolean(BTC_RATE), ETH: Boolean(ETH_RATE && ETH_RPC_URL) } }));
-app.get("/api/products", async (_req, res) => {
+app.post("/api/auth/register", rateLimit({ windowMs: 15 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
+  if (CUSTOMER_SESSION_SECRET.length < 32) return res.status(503).json({ error: "Customer sign-in is not configured yet." });
+  const email = String(req.body.email || "").trim().toLowerCase(), password = String(req.body.password || "");
+  if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
+  if (password.length < 12 || password.length > 128) return res.status(400).json({ error: "Use a password between 12 and 128 characters." });
+  try {
+    const customer = await prisma.customer.create({ data: { email, passwordHash: passwordHash(password) }, select: { id: true, email: true } });
+    setCustomerCookie(res, createCustomerSession(customer), CUSTOMER_SESSION_TTL_SECONDS);
+    res.status(201).json({ authenticated: true, customer });
+  } catch (err) {
+    if (err.code === "P2002") return res.status(409).json({ error: "An account with this email already exists. Sign in instead." });
+    throw err;
+  }
+});
+app.post("/api/auth/login", rateLimit({ windowMs: 15 * 60_000, limit: 8, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
+  if (CUSTOMER_SESSION_SECRET.length < 32) return res.status(503).json({ error: "Customer sign-in is not configured yet." });
+  const email = String(req.body.email || "").trim().toLowerCase(), password = String(req.body.password || "");
+  if (!validEmail(email) || !password || password.length > 128) return res.status(401).json({ error: "Email or password is incorrect." });
+  const customer = await prisma.customer.findUnique({ where: { email } });
+  if (!customer || !verifyPassword(password, customer.passwordHash)) return res.status(401).json({ error: "Email or password is incorrect." });
+  setCustomerCookie(res, createCustomerSession(customer), CUSTOMER_SESSION_TTL_SECONDS);
+  res.json({ authenticated: true, customer: { id: customer.id, email: customer.email } });
+});
+app.get("/api/auth/session", async (req, res) => {
+  const customer = await currentCustomer(req);
+  if (!customer) return res.json({ authenticated: false });
+  res.json({ authenticated: true, customer });
+});
+app.post("/api/auth/logout", (_req, res) => {
+  setCustomerCookie(res, "", 0);
+  res.json({ authenticated: false });
+});
+app.get("/api/products", customerAuth, async (_req, res) => {
   const products = await prisma.product.findMany({ where: { active: true }, orderBy: { sku: "asc" }, select: { sku: true, name: true, description: true, priceNgn: true, fulfillmentMode: true } });
   res.json({ products: products.map(p => ({ ...p, priceNgn: p.priceNgn / 100 })) });
 });
-app.post("/api/orders", rateLimit({ windowMs: 60_000, limit: 12 }), async (req, res) => {
+app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 }), async (req, res) => {
   try {
-    const email = String(req.body.email || "").trim().toLowerCase();
+    const email = req.customer.email;
     const asset = String(req.body.asset || "").toUpperCase();
     const items = req.body.items;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
     if (!["BTC", "ETH"].includes(asset)) return res.status(400).json({ error: "Choose BTC or ETH." });
     if (!Array.isArray(items) || items.length < 1 || items.length > 20) return res.status(400).json({ error: "Cart is empty or invalid." });
     const catalog = await prisma.product.findMany({ where: { active: true, sku: { in: [...new Set(items.map(i => String(i.sku)))] } } });
