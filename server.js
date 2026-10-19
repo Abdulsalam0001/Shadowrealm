@@ -131,7 +131,7 @@ function verifyPassword(password, stored) {
   const expected = Buffer.from(hex, "hex"), actual = crypto.scryptSync(password, salt, expected.length);
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
-function validEmail(email) { return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) && email.length <= 254; }
+function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254; }
 
 function amountToAtomic(ngn, rate, decimals) {
   if (!rate || !/^\d+(\.\d+)?$/.test(rate) || Number(rate) <= 0) throw new Error("Crypto rate is not configured.");
