@@ -271,9 +271,6 @@ app.post("/api/auth/logout", (_req, res) => {
 });
 app.post("/api/membership/invoice", customerAuth, rateLimit({ windowMs: 60_000, limit: 3, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
   if (req.customer.membershipPaidAt) return res.status(409).json({ error: "Membership is already active." });
-  if (!BTC_USD_RATE || !/^\d+(\.\d+)?$/.test(BTC_USD_RATE) || Number(BTC_USD_RATE) <= 0) {
-    return res.status(503).json({ error: "Bitcoin membership checkout is not configured. Set BTC_USD_RATE to the current USD price of one BTC." });
-  }
   try {
     const pending = await prisma.order.findFirst({
       where: { customerId: req.customer.id, type: "MEMBERSHIP", status: { in: ["AWAITING_PAYMENT", "PAYMENT_SUBMITTED", "CONFIRMING"] } },
@@ -282,7 +279,15 @@ app.post("/api/membership/invoice", customerAuth, rateLimit({ windowMs: 60_000, 
     if (pending?.payment) {
       return res.json({ order: publicOrder(pending), accessToken: pending.customerToken, membershipPriceUsd: 20, payment: { asset: "BTC", address: pending.payment.address, expectedAmount: pending.payment.expectedAmount, status: pending.payment.status, explorer: "https://mempool.space" } });
     }
-    const expectedAtomic = amountToAtomic(2000, BTC_USD_RATE, 8).toString();
+    let btcUsdRate = BTC_USD_RATE;
+    if (!btcUsdRate) {
+      const quoteResponse = await fetch("https://api.coinbase.com/v2/prices/BTC-USD/spot", { signal: AbortSignal.timeout(8000) });
+      if (!quoteResponse.ok) throw new Error("Live BTC/USD quote unavailable.");
+      const quote = await quoteResponse.json();
+      btcUsdRate = String(quote?.data?.amount || "");
+    }
+    if (!/^\d+(\.\d+)?$/.test(btcUsdRate) || Number(btcUsdRate) <= 0) throw new Error("Invalid BTC/USD quote.");
+    const expectedAtomic = amountToAtomic(2000, btcUsdRate, 8).toString();
     const expectedAmount = formatAtomic(expectedAtomic, 8, 8);
     const accessToken = randomToken();
     const orderNumber = "SHR-MEM-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
