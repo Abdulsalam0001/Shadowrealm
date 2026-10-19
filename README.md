@@ -26,14 +26,7 @@ Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy
 
 ## First database migration
 
-Create and commit a migration locally before deploying:
-
-```bash
-npm install
-npx prisma migrate dev --name init
-```
-
-Commit the generated `prisma/migrations` directory. Render runs `prisma migrate deploy` on each deployment. Do not rely on `db push` for production.
+The initial migration is included in `prisma/migrations`. Render runs `prisma migrate deploy` during deployment. For future schema changes, run `npx prisma migrate dev --name describe_change` locally and commit the generated migration. Do not rely on `db push` for production.
 
 ## API overview
 
@@ -42,7 +35,7 @@ Commit the generated `prisma/migrations` directory. Render runs `prisma migrate 
 - `POST /api/orders` — JSON: `{ "email": "buyer@example.com", "asset": "BTC", "items": [{ "sku": "toolkit", "quantity": 1 }] }`
 - `POST /api/orders/:id/transaction` — header `x-order-token`, JSON `{ "txHash": "..." }`
 - `GET /api/orders/:id/status` — header `x-order-token`
-- `GET /api/admin/orders` — header `x-admin-key`
+- `GET /api/admin/products` — header `x-admin-key`\n- `PATCH /api/admin/products/:sku` — header `x-admin-key`; accepts `priceNgn`, `active`, `name`, `description`, and `fulfillmentMode` (`AUTO` or `MANUAL`)\n- `GET /api/admin/orders` — header `x-admin-key`
 - `PATCH /api/admin/orders/:id/fulfill` — header `x-admin-key`; only chain-verified paid orders may be fulfilled.
 - `PATCH /api/admin/orders/:id/review` — header `x-admin-key`
 
