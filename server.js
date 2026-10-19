@@ -196,6 +196,36 @@ app.get("/api/orders/:id/status", async (req, res) => {
   if (!order || !token || token.length !== order.customerToken.length || !crypto.timingSafeEqual(Buffer.from(order.customerToken), Buffer.from(token))) return res.status(404).json({ error: "Order not found." });
   res.json({ order: publicOrder(order), payment: { asset: order.payment.asset, status: order.payment.status, confirmations: order.payment.confirmations, requiredConfirmations: order.payment.asset === "BTC" ? BTC_CONFIRMATIONS : ETH_CONFIRMATIONS, expectedAmount: order.payment.expectedAmount, txHash: order.payment.txHash } });
 });
+app.get("/api/admin/products", admin, async (_req, res) => {
+  const products = await prisma.product.findMany({ orderBy: { sku: "asc" } });
+  res.json({ products: products.map(p => ({ ...p, priceNgn: p.priceNgn / 100 })) });
+});
+app.patch("/api/admin/products/:sku", admin, async (req, res) => {
+  const data = {};
+  if (req.body.priceNgn !== undefined) {
+    const price = Number(req.body.priceNgn);
+    if (!Number.isFinite(price) || price <= 0 || price > 100000000) return res.status(400).json({ error: "Invalid product price." });
+    data.priceNgn = Math.round(price * 100);
+  }
+  if (req.body.active !== undefined) {
+    if (typeof req.body.active !== "boolean") return res.status(400).json({ error: "active must be a boolean." });
+    data.active = req.body.active;
+  }
+  if (req.body.fulfillmentMode !== undefined) {
+    if (!["AUTO", "MANUAL"].includes(req.body.fulfillmentMode)) return res.status(400).json({ error: "fulfillmentMode must be AUTO or MANUAL." });
+    data.fulfillmentMode = req.body.fulfillmentMode;
+  }
+  if (req.body.name !== undefined) data.name = String(req.body.name).trim().slice(0, 120);
+  if (req.body.description !== undefined) data.description = String(req.body.description).trim().slice(0, 1000);
+  if (!Object.keys(data).length) return res.status(400).json({ error: "No valid product fields supplied." });
+  try {
+    const product = await prisma.product.update({ where: { sku: req.params.sku }, data });
+    res.json({ product: { ...product, priceNgn: product.priceNgn / 100 } });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Product not found." });
+    throw err;
+  }
+});
 app.get("/api/admin/orders", admin, async (_req, res) => {
   const orders = await prisma.order.findMany({ include: { items: true, payment: true }, orderBy: { createdAt: "desc" }, take: 100 });
   res.json({ orders });
