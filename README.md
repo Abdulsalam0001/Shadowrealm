@@ -1,6 +1,6 @@
 # Shadowrealm store
 
-Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy this repo from the root using `render.yaml`. The storefront is `/` and the admin interface is `/admin` (requires the Render `ADMIN_API_KEY` to load admin data).
+Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy this repo from the root using `render.yaml`. The storefront is `/` and the admin interface is `/admin` and uses username/password login with a signed, HTTP-only session cookie.
 
 ## Current scope
 
@@ -11,13 +11,13 @@ Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy
 - BTC checks use mempool.space transaction outputs and confirmation status. ETH checks use Ethereum JSON-RPC transaction + receipt and explicitly require chain ID 1.
 - Required confirmations default to 2 BTC and 12 ETH. Adjust only after evaluating your risk tolerance.
 - Duplicate transaction hashes are rejected by a database unique constraint.
-- Admin order queue and paid-order fulfilment/review endpoints protected by `x-admin-key`.
+- Admin order queue and paid-order fulfilment/review endpoints protected by a signed, expiring HTTP-only session cookie.
 - Manual fulfilment is the default. Optional automatic fulfilment requires an external provisioner webhook and products explicitly set to `AUTO`.
 
 ## Required deployment setup
 
 1. Create a Neon PostgreSQL database and copy its TLS-enabled connection string into Render's `DATABASE_URL`.
-2. Set `ADMIN_API_KEY` to a strong random secret.
+2. Set `ADMIN_USERNAME` to your chosen admin username, `ADMIN_PASSWORD` to a long unique password, and `ADMIN_SESSION_SECRET` to a cryptographically random secret of at least 32 characters. Keep all three only in Render environment variables.
 3. Set `BTC_NGN_RATE` and `ETH_NGN_RATE` to trusted NGN-per-coin rates. The rates are configuration values, not live market data. Update them regularly or integrate a trusted pricing feed before production.
 4. Set `ETH_RPC_URL` to a reliable Ethereum mainnet RPC endpoint. Do not use a testnet.
 5. Deploy with the included Render blueprint. The build command applies Prisma migrations.
@@ -35,9 +35,9 @@ The initial migration is included in `prisma/migrations`. Render runs `prisma mi
 - `POST /api/orders` — JSON: `{ "email": "buyer@example.com", "asset": "BTC", "items": [{ "sku": "toolkit", "quantity": 1 }] }`
 - `POST /api/orders/:id/transaction` — header `x-order-token`, JSON `{ "txHash": "..." }`
 - `GET /api/orders/:id/status` — header `x-order-token`
-- `GET /api/admin/products` — header `x-admin-key`\n- `PATCH /api/admin/products/:sku` — header `x-admin-key`; accepts `priceNgn`, `active`, `name`, `description`, and `fulfillmentMode` (`AUTO` or `MANUAL`)\n- `GET /api/admin/orders` — header `x-admin-key`
-- `PATCH /api/admin/orders/:id/fulfill` — header `x-admin-key`; only chain-verified paid orders may be fulfilled.
-- `PATCH /api/admin/orders/:id/review` — header `x-admin-key`
+- `GET /api/admin/products` — an authenticated admin session\n- `PATCH /api/admin/products/:sku` — an authenticated admin session; accepts `priceNgn`, `active`, `name`, `description`, and `fulfillmentMode` (`AUTO` or `MANUAL`)\n- `GET /api/admin/orders` — an authenticated admin session
+- `PATCH /api/admin/orders/:id/fulfill` — an authenticated admin session; only chain-verified paid orders may be fulfilled.
+- `PATCH /api/admin/orders/:id/review` — an authenticated admin session
 
 ## Shared receiving addresses and payment matching
 
@@ -51,7 +51,7 @@ All seeded products are `MANUAL`. Admin must review supplier fulfilment and mark
 
 ## Security / launch checklist
 
-- Protect the admin API key and rotate it if exposed.
+- Protect admin credentials; rotate the password and session secret if exposed. Admin sessions expire after 8 hours.
 - Use a private repo or secret manager for sensitive business information.
 - Add customer privacy/terms/refund pages and support contact before launch.
 - Set real supplier prices and fulfilment policies; the current prices are demo seed values.
