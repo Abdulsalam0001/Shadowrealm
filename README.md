@@ -1,6 +1,6 @@
 # Shadowrealm store
 
-Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy this repo from the root using `render.yaml`.
+Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy this repo from the root using `render.yaml`. The storefront is `/` and the admin interface is `/admin` (requires the Render `ADMIN_API_KEY` to load admin data).
 
 ## Current scope
 
