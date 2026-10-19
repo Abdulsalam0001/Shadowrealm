@@ -232,7 +232,7 @@ app.patch("/api/admin/products/:sku", admin, async (req, res) => {
 });
 app.get("/api/admin/orders", admin, async (_req, res) => {
   const orders = await prisma.order.findMany({ include: { items: true, payment: true }, orderBy: { createdAt: "desc" }, take: 100 });
-  res.json({ orders });
+  res.json({ orders: orders.map(({ customerToken, ...order }) => order) });
 });
 app.patch("/api/admin/orders/:id/fulfill", admin, async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { payment: true } });
@@ -249,7 +249,7 @@ app.patch("/api/admin/orders/:id/review", admin, async (req, res) => {
   await prisma.cryptoPayment.update({ where: { id: order.payment.id }, data: { status: "REVIEW" } });
   res.json({ order: publicOrder(updated) });
 });
-app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));
+app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));\napp.get("/admin", (_req, res) => res.sendFile(path.join(__dirname, "admin.html")));
 app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ error: "Unexpected server error." }); });
 
 async function main() {
