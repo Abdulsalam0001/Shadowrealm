@@ -52,7 +52,7 @@ function signAdminPayload(payload) {
   return crypto.createHmac("sha256", ADMIN_SESSION_SECRET).update(payload).digest("hex");
 }
 function getAdminCookie(req) {
-  const match = String(req.headers.cookie || "").match(/(?:^|;\\s*)shadowrealm_admin=([^;]+)/);
+  const match = String(req.headers.cookie || "").match(/(?:^|;\s*)shadowrealm_admin=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : "";
 }
 function validAdminSession(req) {
