@@ -102,7 +102,7 @@ $("refreshStatus").onclick=refreshPaymentStatus;$("submitTx").onclick=async()=>{
  function resetAuto(){clearInterval(autoTimer);if(!paused&&!reduced.matches)autoTimer=setInterval(()=>showSlide(slide+1),6500)}
  host.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>{showSlide(Number(b.dataset.goto));resetAuto()}));
  $("missionPrev").addEventListener("click",()=>{showSlide(slide-1);resetAuto()});$("missionNext").addEventListener("click",()=>{showSlide(slide+1);resetAuto()});
- $("missionPause").addEventListener("click",()=>{paused=!paused;$("missionPause").textContent=paused?"▶":"Ⅱ";$("missionPause").setAttribute("aria-label",paused?"Resume slideshow":"Pause slideshow");if(paused)clearInterval(autoTimer);else resetAuto()});
+ $("missionPause").addEventListener("click",()=>{paused=!paused;$("missionPause").textContent=paused?"▶":"Ⅱ";$("missionPause").setAttribute("aria-label",paused?"Resume slideshow":"Pause slideshow");if(paused)clearInterval(autoTimer);else{start();resetAuto()}});
  host.addEventListener("pointermove",e=>{const b=host.getBoundingClientRect();mouseX=(e.clientX-b.left)/b.width;mouseY=(e.clientY-b.top)/b.height});
  host.addEventListener("mouseenter",()=>clearInterval(autoTimer));host.addEventListener("mouseleave",resetAuto);
  document.addEventListener("visibilitychange",()=>{if(document.hidden)stop();else start()});
