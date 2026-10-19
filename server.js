@@ -84,7 +84,7 @@ function admin(req, res, next) {
   next();
 }
 function customerCookie(req) {
-  const match = String(req.headers.cookie || "").match(/(?:^|;\\s*)shadowrealm_customer=([^;]+)/);
+  const match = String(req.headers.cookie || "").match(/(?:^|;\s*)shadowrealm_customer=([^;]+)/);
   if (!match) return "";
   try { return decodeURIComponent(match[1]); } catch { return ""; }
 }
