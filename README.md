@@ -1,10 +1,10 @@
 # Shadowrealm store
 
-Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy this repo from the root using `render.yaml`. The storefront is `/` and the admin interface is `/admin` and uses username/password login with a signed, HTTP-only session cookie.
+Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy this repo from the root using `render.yaml`. The storefront is `/` and the public homepage is Japan-inspired, and the product catalogue is available only after customer registration or login. The admin interface is `/admin` and uses username/password login with a signed, HTTP-only session cookie.
 
 ## Current scope
 
-- Products and server-side price calculation for the eight demo SKUs shown on the storefront.
+- Products and server-side price calculation for eight demo SKUs, returned only to authenticated customers.
 - Order creation with a private order access token.
 - Direct **Bitcoin mainnet** and **Ethereum mainnet native ETH** payments to the configured receiving addresses.
 - Customer submits a transaction hash; the server verifies live chain data instead of trusting the submitted hash.
@@ -17,7 +17,7 @@ Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy
 ## Required deployment setup
 
 1. Create a Neon PostgreSQL database and copy its TLS-enabled connection string into Render's `DATABASE_URL`.
-2. Set `ADMIN_USERNAME` to your chosen admin username, `ADMIN_PASSWORD` to a long unique password, and `ADMIN_SESSION_SECRET` to a cryptographically random secret of at least 32 characters. Keep all three only in Render environment variables.
+2. Set `CUSTOMER_SESSION_SECRET` to a cryptographically random secret of at least 32 characters for customer sessions. Set `ADMIN_USERNAME` to your chosen admin username, `ADMIN_PASSWORD` to a long unique password, and `ADMIN_SESSION_SECRET` to a cryptographically random secret of at least 32 characters. Keep all three only in Render environment variables.
 3. Set `BTC_NGN_RATE` and `ETH_NGN_RATE` to trusted NGN-per-coin rates. The rates are configuration values, not live market data. Update them regularly or integrate a trusted pricing feed before production.
 4. Set `ETH_RPC_URL` to a reliable Ethereum mainnet RPC endpoint. Do not use a testnet.
 5. Deploy with the included Render blueprint. The build command applies Prisma migrations.
@@ -31,7 +31,9 @@ The initial migration is included in `prisma/migrations`. Render runs `prisma mi
 ## API overview
 
 - `GET /api/health`
-- `GET /api/products`
+- `POST /api/auth/register` — create an account with email and a password of at least 12 characters.
+- `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session` — customer authentication.
+- `GET /api/products` — requires an authenticated customer session.
 - `POST /api/orders` — JSON: `{ "email": "buyer@example.com", "asset": "BTC", "items": [{ "sku": "toolkit", "quantity": 1 }] }`
 - `POST /api/orders/:id/transaction` — header `x-order-token`, JSON `{ "txHash": "..." }`
 - `GET /api/orders/:id/status` — header `x-order-token`
