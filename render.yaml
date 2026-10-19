@@ -17,6 +17,8 @@ services:
         sync: false
       - key: ADMIN_SESSION_SECRET
         sync: false
+      - key: CUSTOMER_SESSION_SECRET
+        sync: false
       - key: BTC_NGN_RATE
         sync: false
       - key: ETH_NGN_RATE
