@@ -18,6 +18,7 @@ const PORT = Number(process.env.PORT || 3000);
 const BTC_ADDRESS = process.env.BTC_RECEIVING_ADDRESS || "bc1qzwsza9hzcaa36avgv5qu6kts4k52wvx2m4cpgv";
 const ETH_ADDRESS = (process.env.ETH_RECEIVING_ADDRESS || "0x2bAE0972099c92463ec38A1bC11b8856892388eC").toLowerCase();
 const BTC_RATE = process.env.BTC_NGN_RATE || "";
+const BTC_USD_RATE = process.env.BTC_USD_RATE || "";
 const ETH_RATE = process.env.ETH_NGN_RATE || "";
 const BTC_CONFIRMATIONS = Number(process.env.BTC_REQUIRED_CONFIRMATIONS || 2);
 const ETH_CONFIRMATIONS = Number(process.env.ETH_REQUIRED_CONFIRMATIONS || 12);
@@ -110,7 +111,7 @@ async function currentCustomer(req) {
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     if (!session.customerId || !Number.isFinite(session.exp) || session.exp <= Math.floor(Date.now() / 1000)) return null;
-    return await prisma.customer.findUnique({ where: { id: session.customerId }, select: { id: true, email: true } });
+    return await prisma.customer.findUnique({ where: { id: session.customerId }, select: { id: true, email: true, membershipPaidAt: true } });
   } catch { return null; }
 }
 async function customerAuth(req, res, next) {
@@ -150,7 +151,7 @@ function formatAtomic(atomic, decimals, displayDecimals = decimals) {
 }
 function randomToken() { return crypto.randomBytes(32).toString("hex"); }
 function publicOrder(order) {
-  return { id: order.id, orderNumber: order.orderNumber, status: order.status, totalNgn: order.totalNgn / 100, createdAt: order.createdAt };
+  return { id: order.id, orderNumber: order.orderNumber, type: order.type, status: order.status, totalNgn: order.totalNgn / 100, createdAt: order.createdAt };
 }
 async function rpc(method, params) {
   if (!ETH_RPC_URL) throw new Error("ETH_RPC_URL is not configured.");
@@ -209,7 +210,13 @@ async function checkPayment(paymentId) {
     const paymentStatus = result.confirmations >= required ? "PAID" : "CONFIRMING";
     await prisma.cryptoPayment.update({ where: { id: payment.id }, data: { status: paymentStatus, confirmations: result.confirmations, paidAtomic: result.paidAtomic, lastCheckedAt: now } });
     await prisma.order.update({ where: { id: payment.orderId }, data: { status: paymentStatus === "PAID" ? "PAID" : "CONFIRMING" } });
-    if (paymentStatus === "PAID") await tryAutoFulfillment(payment.orderId);
+    if (paymentStatus === "PAID") {
+      if (payment.order.type === "MEMBERSHIP" && payment.order.customerId) {
+        await prisma.customer.update({ where: { id: payment.order.customerId }, data: { membershipPaidAt: new Date() } });
+      } else if (payment.order.type === "PRODUCT") {
+        await tryAutoFulfillment(payment.orderId);
+      }
+    }
   } catch (err) {
     console.error("Payment verification error:", err.message);
     await prisma.cryptoPayment.update({ where: { id: payment.id }, data: { lastCheckedAt: new Date() } }).catch(() => {});
@@ -236,7 +243,7 @@ app.post("/api/auth/register", rateLimit({ windowMs: 15 * 60_000, limit: 5, stan
   if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
   if (password.length < 12 || password.length > 128) return res.status(400).json({ error: "Use a password between 12 and 128 characters." });
   try {
-    const customer = await prisma.customer.create({ data: { email, passwordHash: passwordHash(password) }, select: { id: true, email: true } });
+    const customer = await prisma.customer.create({ data: { email, passwordHash: passwordHash(password) }, select: { id: true, email: true, membershipPaidAt: true } });
     setCustomerCookie(res, createCustomerSession(customer), CUSTOMER_SESSION_TTL_SECONDS);
     res.status(201).json({ authenticated: true, customer });
   } catch (err) {
@@ -251,7 +258,7 @@ app.post("/api/auth/login", rateLimit({ windowMs: 15 * 60_000, limit: 8, standar
   const customer = await prisma.customer.findUnique({ where: { email } });
   if (!customer || !verifyPassword(password, customer.passwordHash)) return res.status(401).json({ error: "Email or password is incorrect." });
   setCustomerCookie(res, createCustomerSession(customer), CUSTOMER_SESSION_TTL_SECONDS);
-  res.json({ authenticated: true, customer: { id: customer.id, email: customer.email } });
+  res.json({ authenticated: true, customer: { id: customer.id, email: customer.email, membershipPaidAt: customer.membershipPaidAt } });
 });
 app.get("/api/auth/session", async (req, res) => {
   const customer = await currentCustomer(req);
@@ -262,11 +269,42 @@ app.post("/api/auth/logout", (_req, res) => {
   setCustomerCookie(res, "", 0);
   res.json({ authenticated: false });
 });
-app.get("/api/products", customerAuth, async (_req, res) => {
-  const products = await prisma.product.findMany({ where: { active: true }, orderBy: { sku: "asc" }, select: { sku: true, name: true, description: true, priceNgn: true, fulfillmentMode: true } });
-  res.json({ products: products.map(p => ({ ...p, priceNgn: p.priceNgn / 100 })) });
+app.post("/api/membership/invoice", customerAuth, rateLimit({ windowMs: 60_000, limit: 3, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
+  if (req.customer.membershipPaidAt) return res.status(409).json({ error: "Membership is already active." });
+  if (!BTC_USD_RATE || !/^\\d+(\\.\\d+)?$/.test(BTC_USD_RATE) || Number(BTC_USD_RATE) <= 0) {
+    return res.status(503).json({ error: "Bitcoin membership checkout is not configured. Set BTC_USD_RATE to the current USD price of one BTC." });
+  }
+  try {
+    const pending = await prisma.order.findFirst({
+      where: { customerId: req.customer.id, type: "MEMBERSHIP", status: { in: ["AWAITING_PAYMENT", "PAYMENT_SUBMITTED", "CONFIRMING"] } },
+      include: { payment: true }, orderBy: { createdAt: "desc" }
+    });
+    if (pending?.payment) {
+      return res.json({ order: publicOrder(pending), accessToken: pending.customerToken, membershipPriceUsd: 20, payment: { asset: "BTC", address: pending.payment.address, expectedAmount: pending.payment.expectedAmount, status: pending.payment.status, explorer: "https://mempool.space" } });
+    }
+    const expectedAtomic = amountToAtomic(2000, BTC_USD_RATE, 8).toString();
+    const expectedAmount = formatAtomic(expectedAtomic, 8, 8);
+    const accessToken = randomToken();
+    const orderNumber = "SHR-MEM-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
+    const order = await prisma.order.create({ data: {
+      orderNumber, customerEmail: req.customer.email, customerToken: accessToken,
+      customerId: req.customer.id, type: "MEMBERSHIP", totalNgn: 0, status: "AWAITING_PAYMENT",
+      payment: { create: { asset: "BTC", address: BTC_ADDRESS, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
+    }, include: { payment: true } });
+    res.status(201).json({ order: publicOrder(order), accessToken, membershipPriceUsd: 20, payment: { asset: "BTC", address: BTC_ADDRESS, expectedAmount, status: order.payment.status, explorer: "https://mempool.space" } });
+  } catch (err) {
+    console.error("Membership invoice error:", err.message);
+    res.status(500).json({ error: "Could not create membership invoice." });
+  }
+});
+
+app.get("/api/products", customerAuth, async (req, res) => {
+  const fullMember = Boolean(req.customer.membershipPaidAt);
+  const products = await prisma.product.findMany({ where: { active: true }, orderBy: { sku: "asc" }, take: fullMember ? undefined : 2, select: { sku: true, name: true, description: true, priceNgn: true, fulfillmentMode: true } });
+  res.json({ products: products.map(p => ({ ...p, priceNgn: p.priceNgn / 100 })), membershipRequired: !fullMember, membershipPaidAt: req.customer.membershipPaidAt || null });
 });
 app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 }), async (req, res) => {
+  if (!req.customer.membershipPaidAt) return res.status(403).json({ error: "Full catalogue ordering requires verified $20 Bitcoin membership." });
   try {
     const email = req.customer.email;
     const asset = String(req.body.asset || "").toUpperCase();
