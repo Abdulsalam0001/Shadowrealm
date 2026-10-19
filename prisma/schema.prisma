@@ -107,3 +107,26 @@ model CryptoPayment {
   updatedAt      DateTime      @updatedAt
   order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
+
+model MediaSubmission {
+  id              String                @id @default(cuid())
+  reference       String                @unique
+  journalistName  String
+  journalistEmail String
+  journalistPhone String?
+  role            String
+  publicationName String
+  articleUrl      String
+  package         String
+  timing          String
+  summary         String
+  budget          String?
+  consentAt       DateTime
+  status          MediaSubmissionStatus @default(PENDING)
+  adminNote       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([status, createdAt])
+  @@index([journalistEmail, createdAt])
+}
