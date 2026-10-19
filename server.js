@@ -48,7 +48,7 @@ function amountToAtomic(ngn, rate, decimals) {
   const scale = 10n ** BigInt(decimals);
   const rateScaled = BigInt(whole) * scale + BigInt((fraction + "0".repeat(decimals)).slice(0, decimals));
   if (rateScaled <= 0n) throw new Error("Invalid crypto rate.");
-  return (BigInt(ngn) * scale * scale / rateScaled);
+  return (BigInt(ngn) * scale * scale) / (rateScaled * 100n);
 }
 function formatAtomic(atomic, decimals) {
   const n = BigInt(atomic), scale = 10n ** BigInt(decimals);
@@ -160,7 +160,7 @@ app.post("/api/orders", rateLimit({ windowMs: 60_000, limit: 12 }), async (req, 
     const orderNumber = "SHR-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
     const accessToken = randomToken();
     // Small per-order increment enables matching shared-wallet deposits; the exact amount is shown before payment.
-    const offset = BigInt(crypto.randomInt(1, 9000));
+    const offset = BigInt(crypto.randomInt(1, 1000));
     const expectedAtomic = (baseAtomic + offset).toString();
     const expectedAmount = formatAtomic(expectedAtomic, config.decimals);
     const order = await prisma.order.create({ data: {
