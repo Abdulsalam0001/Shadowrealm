@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum OrderType {
+  PRODUCT
+  MEMBERSHIP
+}
+
 enum OrderStatus {
   AWAITING_PAYMENT
   PAYMENT_SUBMITTED
@@ -42,6 +47,8 @@ model Customer {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  membershipPaidAt DateTime?
+  orders       Order[]
 }
 
 model Product {
@@ -62,6 +69,9 @@ model Order {
   customerEmail   String
   customerToken   String      @unique
   totalNgn        Int
+  type            OrderType    @default(PRODUCT)
+  customerId      String?
+  customer        Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   status          OrderStatus @default(AWAITING_PAYMENT)
   fulfillmentNote String?
   fulfilledAt     DateTime?
