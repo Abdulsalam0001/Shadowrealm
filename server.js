@@ -50,9 +50,11 @@ function amountToAtomic(ngn, rate, decimals) {
   if (rateScaled <= 0n) throw new Error("Invalid crypto rate.");
   return (BigInt(ngn) * scale * scale) / (rateScaled * 100n);
 }
-function formatAtomic(atomic, decimals) {
+function formatAtomic(atomic, decimals, displayDecimals = decimals) {
   const n = BigInt(atomic), scale = 10n ** BigInt(decimals);
-  const whole = n / scale, frac = (n % scale).toString().padStart(decimals, "0").replace(/0+$/, "");
+  const whole = n / scale;
+  const visible = (n % scale) / (10n ** BigInt(decimals - displayDecimals));
+  const frac = visible.toString().padStart(displayDecimals, "0").replace(/0+$/, "");
   return frac ? whole.toString() + "." + frac : whole.toString();
 }
 function randomToken() { return crypto.randomBytes(32).toString("hex"); }
@@ -160,9 +162,11 @@ app.post("/api/orders", rateLimit({ windowMs: 60_000, limit: 12 }), async (req, 
     const orderNumber = "SHR-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
     const accessToken = randomToken();
     // Small per-order increment enables matching shared-wallet deposits; the exact amount is shown before payment.
-    const offset = BigInt(crypto.randomInt(1, 1000));
-    const expectedAtomic = (baseAtomic + offset).toString();
-    const expectedAmount = formatAtomic(expectedAtomic, config.decimals);
+    const displayUnit = 10n ** BigInt(config.decimals - config.displayDecimals);
+    const roundedBaseAtomic = (baseAtomic / displayUnit) * displayUnit;
+    const offset = BigInt(crypto.randomInt(1, 1000)) * displayUnit;
+    const expectedAtomic = (roundedBaseAtomic + offset).toString();
+    const expectedAmount = formatAtomic(expectedAtomic, config.decimals, config.displayDecimals);
     const order = await prisma.order.create({ data: {
       orderNumber, customerEmail: email, customerToken: accessToken, totalNgn, status: "AWAITING_PAYMENT",
       items: { create: normalized.map(i => { const p = catalog.find(x => x.sku === i.sku); return { productSku: p.sku, productName: p.name, quantity: i.quantity, unitPriceNgn: p.priceNgn }; }) },
