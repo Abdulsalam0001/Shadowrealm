@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  AWAITING_PAYMENT
+  PAYMENT_SUBMITTED
+  CONFIRMING
+  PAID
+  PAYMENT_REVIEW
+  FULFILLMENT_PENDING
+  FULFILLED
+}
+
+enum PaymentAsset {
+  BTC
+  ETH
+}
+
+enum PaymentStatus {
+  AWAITING_PAYMENT
+  SUBMITTED
+  CONFIRMING
+  PAID
+  REVIEW
+  FULFILLED
+}
+
+enum FulfillmentMode {
+  MANUAL
+  AUTO
+}
+
+model Product {
+  id              String          @id @default(cuid())
+  sku             String          @unique
+  name            String
+  description     String
+  priceNgn        Int
+  active          Boolean         @default(true)
+  fulfillmentMode FulfillmentMode @default(MANUAL)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  customerEmail   String
+  customerToken   String      @unique
+  totalNgn        Int
+  status          OrderStatus @default(AWAITING_PAYMENT)
+  fulfillmentNote String?
+  fulfilledAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  items           OrderItem[]
+  payment         CryptoPayment?
+}
+
+model OrderItem {
+  id           String @id @default(cuid())
+  orderId      String
+  productSku   String
+  productName  String
+  quantity     Int
+  unitPriceNgn Int
+  order        Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model CryptoPayment {
+  id             String        @id @default(cuid())
+  orderId        String        @unique
+  asset          PaymentAsset
+  address        String
+  expectedAtomic String
+  expectedAmount String
+  txHash         String?       @unique
+  paidAtomic     String?
+  status         PaymentStatus @default(AWAITING_PAYMENT)
+  confirmations  Int           @default(0)
+  lastCheckedAt  DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
