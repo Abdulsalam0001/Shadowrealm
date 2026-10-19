@@ -37,6 +37,67 @@
 
 @media(max-width:900px){.hero-grid{gap:20px}.scene{transform:scale(.9);transform-origin:center right}.categories,.products{grid-template-columns:repeat(2,1fr)}.navlinks{gap:13px}.hero{padding:65px 0}.hero h1{letter-spacing:-3px}}
 @media(max-width:650px){.wrap{width:calc(100% - 28px)}.topline .wrap{font-size:7px;letter-spacing:1px}.nav{height:64px}.navlinks{display:none}.navlinks.open{display:flex;position:absolute;top:64px;left:0;right:0;background:#0c0b12;padding:18px 22px;flex-direction:column;border-bottom:1px solid var(--line)}.menu{display:block}.nav-actions .user-label{display:none}.nav-actions .btn{padding:8px 9px;font-size:8px}.hero{padding:48px 0 36px}.hero-grid{grid-template-columns:1fr}.hero h1{font-size:clamp(48px,14vw,70px)}.scene{height:265px;transform:none;margin-top:5px}.sun{width:130px;height:130px}.ring{width:205px;height:205px}.tag{font-size:7px;padding:8px}.hero-foot{gap:12px}.section{padding:50px 0}.head{display:block}.head p{margin-bottom:0}.categories{gap:8px}.category{padding:13px;min-height:150px}.category h3{font-size:12px}.lock-card{grid-template-columns:1fr;padding:22px}.catalog-top{align-items:start;flex-direction:column}.products{gap:8px}.product-art{height:90px}.pbody{padding:11px}.pbody h3{font-size:11px}.pbody p{font-size:9px;min-height:70px}.price{font-size:11px}.benefits{grid-template-columns:1fr;gap:0}.cta{display:block;padding:23px}.cta .btn{margin-top:10px;width:100%}.foot{display:block}.foot>div{margin-bottom:15px}.modal{padding:18px}}
+
+/* Production polish: cinematic, responsive hero */
+.hero{isolation:isolate;padding:clamp(68px,7vw,108px) 0 clamp(56px,6vw,86px);background:radial-gradient(ellipse at 78% 38%,rgba(240,68,82,.20),transparent 36%),radial-gradient(ellipse at 92% 14%,rgba(112,74,180,.16),transparent 32%),linear-gradient(120deg,#09080f 0%,#0c0912 54%,#100a13 100%)}
+.hero-grid{grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:clamp(30px,5vw,72px)}
+.hero .eyebrow{font-size:10px;padding:9px 13px;letter-spacing:2.2px;box-shadow:0 8px 30px #0004}
+.hero .jp-title{font-size:12px;letter-spacing:4.5px;margin-top:25px}
+.hero h1{font-size:clamp(62px,7.1vw,106px);line-height:.91;letter-spacing:-.065em;margin:20px 0 26px;text-wrap:balance}
+.hero h1 span{color:transparent;background:linear-gradient(105deg,#ff6878 0%,#f04452 48%,#bb72b9 100%);background-clip:text;-webkit-background-clip:text}
+.hero-copy{max-width:570px;font-size:clamp(15px,1.2vw,17px);line-height:1.9;color:#b8b1c1}
+.hero-actions{gap:12px;margin:30px 0 20px}
+.hero-actions .btn{min-height:49px;padding:14px 21px;font-size:12px}
+.hero .tiny{font-size:10px;line-height:1.8;letter-spacing:1.15px}
+.hero-foot{gap:22px;margin-top:31px;font-size:10px}
+.scene{height:clamp(390px,38vw,500px);transform:none;filter:drop-shadow(0 22px 46px #0005)}
+.sun{width:clamp(155px,17vw,220px);height:clamp(155px,17vw,220px);right:15%;top:7%;background:radial-gradient(circle at 34% 28%,#ff8d91 0%,#ef465e 38%,#8b204f 76%);box-shadow:0 0 35px #e3334440,0 0 105px #e3334424}
+.ring{width:clamp(255px,28vw,350px);height:clamp(255px,28vw,350px);right:0;top:-4%;border-color:#d5b9ff35}
+.building{box-shadow:inset 0 0 32px #0007,0 0 30px #f0445207}
+.building:before{background:repeating-linear-gradient(0deg,transparent 0 18px,#f044524b 19px 21px),repeating-linear-gradient(90deg,transparent 0 14px,#9e7bff45 15px 17px)}
+.b1{left:0;width:23%;height:57%}.b2{left:23%;width:31%;height:83%}.b3{left:54%;width:23%;height:72%}.b4{right:0;width:23%;height:49%}
+.b2:after{font-size:10px;letter-spacing:2.3px;box-shadow:0 0 28px #f0445230}
+.street{height:13%;background:linear-gradient(#0a0a10,#241420);border-top-color:#633044}
+.street-label{font-size:9px;letter-spacing:4.5px;bottom:0}
+.tag{padding:12px 14px;font-size:10px;line-height:1.8;box-shadow:0 12px 32px #0007;backdrop-filter:blur(12px)}
+.tag.one{top:24%;left:-3%}.tag.two{right:-3%;bottom:20%}
+.hero:after{right:3%;top:1%;font-size:clamp(320px,40vw,570px);color:#ffffff05}
+@media(min-width:1200px){.hero-grid{gap:70px}.scene{height:480px}}
+@media(max-width:900px){
+ .hero{padding:62px 0 54px}.hero-grid{grid-template-columns:minmax(0,1.03fr) minmax(0,.97fr);gap:22px}
+ .hero h1{font-size:clamp(54px,7.2vw,78px);letter-spacing:-.06em}
+ .hero-copy{font-size:14px}.scene{height:350px}
+ .sun{width:155px;height:155px}.ring{width:245px;height:245px}
+ .tag{font-size:8px;padding:9px}.hero-foot{gap:13px}
+}
+@media(max-width:650px){
+ .hero{padding:43px 0 32px;background:radial-gradient(ellipse at 50% 73%,rgba(240,68,82,.17),transparent 42%),radial-gradient(ellipse at 95% 15%,rgba(112,74,180,.15),transparent 34%),#09080f}
+ .hero-grid{grid-template-columns:minmax(0,1fr);gap:10px}
+ .hero .eyebrow{font-size:9px;letter-spacing:1.7px;padding:8px 10px}
+ .hero .jp-title{font-size:10px;letter-spacing:3.2px;margin-top:18px}
+ .hero h1{font-size:clamp(58px,16.8vw,82px);line-height:.9;letter-spacing:-.067em;margin:15px 0 20px}
+ .hero-copy{font-size:15px;line-height:1.8;max-width:38rem}
+ .hero-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:24px 0 14px}
+ .hero-actions .btn{min-height:50px;padding:12px 9px;font-size:11px;text-align:center}
+ .hero .tiny{font-size:9px;letter-spacing:.8px;line-height:1.9}
+ .hero-foot{gap:9px 14px;margin-top:21px;font-size:9px}
+ .scene{height:clamp(285px,78vw,350px);width:100%;margin:0;overflow:hidden}
+ .sun{width:clamp(135px,39vw,170px);height:clamp(135px,39vw,170px);right:16%;top:4%}
+ .ring{width:clamp(220px,63vw,275px);height:clamp(220px,63vw,275px);right:1%;top:-2%}
+ .b1{left:0;width:23%;height:51%}.b2{left:23%;width:31%;height:76%}.b3{left:54%;width:23%;height:66%}.b4{right:0;width:23%;height:44%}
+ .tag{font-size:7px;line-height:1.7;padding:7px 8px;letter-spacing:.4px}
+ .tag.one{left:0;top:20%}.tag.two{right:0;bottom:18%}
+ .street-label{left:30%;font-size:7px;letter-spacing:3px}
+ .hero:after{right:-5%;top:28%;font-size:320px}
+}
+@media(max-width:370px){
+ .hero h1{font-size:56px}
+ .hero-actions{grid-template-columns:1fr}
+ .scene{height:275px}
+ .tag{max-width:145px}
+}
+@media(prefers-reduced-motion:reduce){.hero *{scroll-behavior:auto}}
+
 </style></head><body>
 <div class="topline"><div class="wrap"><span>東京の夜 · TOKYO DIGITAL CULTURE</span><span class="live">● MEMBER GATE ONLINE</span></div></div>
 <header><div class="wrap nav"><a class="brand" href="#"><span class="mark">影</span><span>SHADOWREALM<small>DIGITAL AFTER DARK</small></span></a><nav class="navlinks" id="navlinks"><a href="#approach">The realm</a><a href="#departments">Departments</a><a href="#membership">Membership</a></nav><div class="nav-actions"><span class="user-label" id="userLabel"></span><button class="btn secondary" id="navAuth">Sign in ↗</button><button class="btn ghost" id="cartOpen" hidden>Cart <span id="cartCount">0</span></button><button class="btn ghost" id="logoutBtn" hidden>Sign out</button><button class="menu" id="menu" aria-label="Open menu">☰</button></div></div></header>
