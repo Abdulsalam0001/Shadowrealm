@@ -41,6 +41,14 @@ enum FulfillmentMode {
   AUTO
 }
 
+enum MediaSubmissionStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
 model Customer {
   id           String   @id @default(cuid())
   email        String   @unique
