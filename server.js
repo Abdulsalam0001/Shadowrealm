@@ -236,7 +236,69 @@ async function tryAutoFulfillment(orderId) {
   } catch (err) { console.error("Fulfillment provider request failed:", err.message); }
 }
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, databaseConfigured: Boolean(process.env.DATABASE_URL), crypto: { BTC: Boolean(BTC_RATE), ETH: Boolean(ETH_RATE && ETH_RPC_URL) } }));
+
+const mediaSubmissionLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false });
+const MEDIA_PACKAGES = new Set(["EDITORIAL_REVIEW", "ARTICLE_SPOTLIGHT", "NEWSROOM_CAMPAIGN", "CUSTOM"]);
+const MEDIA_ROLES = new Set(["Journalist / Reporter", "Editor", "Publisher / Newsroom", "Freelance writer", "Media representative", "Other"]);
+const MEDIA_TIMINGS = new Set(["FLEXIBLE", "THIS_WEEK", "NEXT_2_WEEKS", "DATE_TO_CONFIRM"]);
+const MEDIA_BUDGETS = new Set(["UNDER_100", "100_500", "500_PLUS", "QUOTE_FIRST", ""]);
+function cleanMediaText(value, max) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
+function validArticleUrl(value) {
+  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && Boolean(url.hostname) && !url.username && !url.password; }
+  catch { return false; }
+}
+app.post("/api/media-submissions", mediaSubmissionLimiter, async (req, res) => {
+  const body = req.body || {};
+  // A filled honeypot is silently accepted to avoid teaching simple bots the check.
+  if (cleanMediaText(body.website, 200)) return res.status(202).json({ received: true, reference: "ARP-RECEIVED" });
+  const journalistName = cleanMediaText(body.journalistName, 100);
+  const journalistEmail = cleanMediaText(body.journalistEmail, 254).toLowerCase();
+  const journalistPhone = cleanMediaText(body.journalistPhone, 80);
+  const role = cleanMediaText(body.role, 60);
+  const publicationName = cleanMediaText(body.publicationName, 160);
+  const articleUrl = cleanMediaText(body.articleUrl, 2048);
+  const promotionPackage = cleanMediaText(body.package, 40);
+  const timing = cleanMediaText(body.timing, 40);
+  const summary = cleanMediaText(body.summary, 2500);
+  const budget = cleanMediaText(body.budget, 40);
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(journalistEmail);
+  if (journalistName.length < 2 || !validEmail || !role || !MEDIA_ROLES.has(role) ||
+      publicationName.length < 2 || !validArticleUrl(articleUrl) || !MEDIA_PACKAGES.has(promotionPackage) ||
+      !MEDIA_TIMINGS.has(timing) || !MEDIA_BUDGETS.has(budget) || summary.length < 20 ||
+      summary.length > 2500 || body.consent !== true) {
+    return res.status(400).json({ error: "Check the required fields, article URL, summary and consent, then try again." });
+  }
+  const reference = "ARP-" + crypto.randomBytes(5).toString("hex").toUpperCase();
+  try {
+    const submission = await prisma.mediaSubmission.create({ data: {
+      reference, journalistName, journalistEmail, journalistPhone: journalistPhone || null,
+      role, publicationName, articleUrl, package: promotionPackage, timing, summary,
+      budget: budget || null, consentAt: new Date()
+    }, select: { reference: true, createdAt: true } });
+    res.status(201).json({ received: true, reference: submission.reference, submittedAt: submission.createdAt });
+  } catch (err) {
+    console.error("Media submission save failed:", err.message);
+    res.status(503).json({ error: "The submission service is temporarily unavailable. Please try again shortly." });
+  }
+});
+app.get("/api/admin/media-submissions", admin, async (_req, res) => {
+  const submissions = await prisma.mediaSubmission.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
+  res.json({ submissions });
+});
+app.patch("/api/admin/media-submissions/:id", admin, async (req, res) => {
+  const allowed = ["PENDING", "IN_REVIEW", "APPROVED", "REJECTED", "COMPLETED"];
+  const status = cleanMediaText(req.body?.status, 30);
+  const adminNote = cleanMediaText(req.body?.adminNote, 1500);
+  if (!allowed.includes(status)) return res.status(400).json({ error: "Invalid media submission status." });
+  try {
+    const submission = await prisma.mediaSubmission.update({ where: { id: req.params.id }, data: { status, adminNote: adminNote || null } });
+    res.json({ submission });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Media submission not found." });
+    throw err;
+  }
+});
+\napp.get("/api/health", (_req, res) => res.json({ ok: true, databaseConfigured: Boolean(process.env.DATABASE_URL), crypto: { BTC: Boolean(BTC_RATE), ETH: Boolean(ETH_RATE && ETH_RPC_URL) } }));
 app.post("/api/auth/register", rateLimit({ windowMs: 15 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
   if (CUSTOMER_SESSION_SECRET.length < 32) return res.status(503).json({ error: "Customer sign-in is not configured yet." });
   const email = String(req.body.email || "").trim().toLowerCase(), password = String(req.body.password || "");
