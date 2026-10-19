@@ -25,7 +25,7 @@ const ETH_RPC_URL = process.env.ETH_RPC_URL || "";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
 const FULFILLMENT_WEBHOOK_URL = process.env.FULFILLMENT_WEBHOOK_URL || "";
 const FULFILLMENT_WEBHOOK_SECRET = process.env.FULFILLMENT_WEBHOOK_SECRET || "";
-const assets = { BTC: { decimals: 8, rate: BTC_RATE, address: BTC_ADDRESS }, ETH: { decimals: 8, rate: ETH_RATE, address: ETH_ADDRESS } };
+const assets = { BTC: { decimals: 8, displayDecimals: 8, rate: BTC_RATE, address: BTC_ADDRESS }, ETH: { decimals: 18, displayDecimals: 8, rate: ETH_RATE, address: ETH_ADDRESS } };
 
 const seedProducts = [
   { sku: "toolkit", name: "Developer Toolkit", description: "Productivity utilities for development work.", priceNgn: 850000, fulfillmentMode: "MANUAL" },
@@ -91,7 +91,7 @@ async function verifyTransaction(payment) {
     rpc("eth_getTransactionReceipt", [payment.txHash]),
     rpc("eth_blockNumber", [])
   ]);
-  if (!tx || !receipt) return { found: false, confirmations: 0 };
+  if (!tx || !receipt || String(tx.hash || "").toLowerCase() !== payment.txHash.toLowerCase()) return { found: false, confirmations: 0 };
   const blockNumber = receipt.blockNumber ? BigInt(receipt.blockNumber) : 0n;
   const tip = BigInt(tipHex);
   const confirmations = blockNumber > 0n && tip >= blockNumber ? Number(tip - blockNumber + 1n) : 0;
