@@ -441,7 +441,9 @@ app.get("/servers", (_req, res) => res.sendFile(path.join(__dirname, "servers.ht
 app.get("/email", (_req, res) => res.sendFile(path.join(__dirname, "email.html")));
 app.get("/media", (_req, res) => res.sendFile(path.join(__dirname, "media.html")));
 app.get("/pricing", (_req, res) => res.sendFile(path.join(__dirname, "pricing.html")));
-app.get("/support", (_req, res) => res.sendFile(path.join(__dirname, "support.html")));\napp.get("/dashboard", (_req, res) => res.sendFile(path.join(__dirname, "dashboard.html")));\napp.get("/deposit", (_req, res) => res.sendFile(path.join(__dirname, "deposit.html")));
+app.get("/support", (_req, res) => res.sendFile(path.join(__dirname, "support.html")));
+app.get("/dashboard", (_req, res) => res.sendFile(path.join(__dirname, "dashboard.html")));
+app.get("/deposit", (_req, res) => res.sendFile(path.join(__dirname, "deposit.html")));
 app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));
 app.get("/admin", (_req, res) => res.sendFile(path.join(__dirname, "admin.html")));
 app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ error: "Unexpected server error." }); });
