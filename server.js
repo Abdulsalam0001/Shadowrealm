@@ -22,7 +22,9 @@ const ETH_RATE = process.env.ETH_NGN_RATE || "";
 const BTC_CONFIRMATIONS = Number(process.env.BTC_REQUIRED_CONFIRMATIONS || 2);
 const ETH_CONFIRMATIONS = Number(process.env.ETH_REQUIRED_CONFIRMATIONS || 12);
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "";
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || "";
 const FULFILLMENT_WEBHOOK_URL = process.env.FULFILLMENT_WEBHOOK_URL || "";
 const FULFILLMENT_WEBHOOK_SECRET = process.env.FULFILLMENT_WEBHOOK_SECRET || "";
 const assets = { BTC: { decimals: 8, displayDecimals: 8, rate: BTC_RATE, address: BTC_ADDRESS }, ETH: { decimals: 18, displayDecimals: 8, rate: ETH_RATE, address: ETH_ADDRESS } };
@@ -38,8 +40,44 @@ const seedProducts = [
   { sku: "smtpgrowth", name: "SMTP Growth", description: "Email delivery for verified domains and opted-in lists.", priceNgn: 2400000, fulfillmentMode: "MANUAL" }
 ];
 
+const ADMIN_SESSION_COOKIE = "shadowrealm_admin";
+const ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60;
+
+function safeEqualText(left, right) {
+  const a = Buffer.from(String(left));
+  const b = Buffer.from(String(right));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function signAdminPayload(payload) {
+  return crypto.createHmac("sha256", ADMIN_SESSION_SECRET).update(payload).digest("hex");
+}
+function getAdminCookie(req) {
+  const match = String(req.headers.cookie || "").match(/(?:^|;\\s*)shadowrealm_admin=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+function validAdminSession(req) {
+  if (!ADMIN_SESSION_SECRET || ADMIN_SESSION_SECRET.length < 32) return false;
+  const token = getAdminCookie(req);
+  const separator = token.lastIndexOf(".");
+  if (separator < 1) return false;
+  const payload = token.slice(0, separator);
+  const signature = token.slice(separator + 1);
+  if (!safeEqualText(signature, signAdminPayload(payload))) return false;
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return session.username === ADMIN_USERNAME && Number.isFinite(session.exp) && session.exp > Math.floor(Date.now() / 1000);
+  } catch {
+    return false;
+  }
+}
+function setAdminCookie(res, value, maxAge) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", value
+    ? `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(value)}; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=${maxAge}${secure}`
+    : `${ADMIN_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=0${secure}`);
+}
 function admin(req, res, next) {
-  if (!ADMIN_API_KEY || req.get("x-admin-key") !== ADMIN_API_KEY) return res.status(401).json({ error: "Unauthorized admin request." });
+  if (!validAdminSession(req)) return res.status(401).json({ error: "Please log in to the admin panel." });
   next();
 }
 function amountToAtomic(ngn, rate, decimals) {
@@ -199,6 +237,28 @@ app.get("/api/orders/:id/status", async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { payment: true } });
   if (!order || !token || token.length !== order.customerToken.length || !crypto.timingSafeEqual(Buffer.from(order.customerToken), Buffer.from(token))) return res.status(404).json({ error: "Order not found." });
   res.json({ order: publicOrder(order), payment: { asset: order.payment.asset, status: order.payment.status, confirmations: order.payment.confirmations, requiredConfirmations: order.payment.asset === "BTC" ? BTC_CONFIRMATIONS : ETH_CONFIRMATIONS, expectedAmount: order.payment.expectedAmount, txHash: order.payment.txHash } });
+});
+app.post("/api/admin/login", rateLimit({ windowMs: 15 * 60_000, limit: 8, standardHeaders: true, legacyHeaders: false }), (req, res) => {
+  if (!ADMIN_USERNAME || !ADMIN_PASSWORD || ADMIN_SESSION_SECRET.length < 32) {
+    return res.status(503).json({ error: "Admin login is not configured. Set ADMIN_USERNAME, ADMIN_PASSWORD and a 32+ character ADMIN_SESSION_SECRET in Render." });
+  }
+  const username = String(req.body.username || "");
+  const password = String(req.body.password || "");
+  if (!safeEqualText(username, ADMIN_USERNAME) || !safeEqualText(password, ADMIN_PASSWORD)) {
+    return res.status(401).json({ error: "Invalid username or password." });
+  }
+  const payload = Buffer.from(JSON.stringify({ username: ADMIN_USERNAME, exp: Math.floor(Date.now() / 1000) + ADMIN_SESSION_TTL_SECONDS })).toString("base64url");
+  const token = payload + "." + signAdminPayload(payload);
+  setAdminCookie(res, token, ADMIN_SESSION_TTL_SECONDS);
+  res.json({ authenticated: true, username: ADMIN_USERNAME });
+});
+app.get("/api/admin/session", (req, res) => {
+  if (!validAdminSession(req)) return res.status(401).json({ authenticated: false });
+  res.json({ authenticated: true, username: ADMIN_USERNAME });
+});
+app.post("/api/admin/logout", (_req, res) => {
+  setAdminCookie(res, "", 0);
+  res.json({ authenticated: false });
 });
 app.get("/api/admin/products", admin, async (_req, res) => {
   const products = await prisma.product.findMany({ orderBy: { sku: "asc" } });
