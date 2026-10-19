@@ -271,7 +271,7 @@ app.post("/api/auth/logout", (_req, res) => {
 });
 app.post("/api/membership/invoice", customerAuth, rateLimit({ windowMs: 60_000, limit: 3, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
   if (req.customer.membershipPaidAt) return res.status(409).json({ error: "Membership is already active." });
-  if (!BTC_USD_RATE || !/^\\d+(\\.\\d+)?$/.test(BTC_USD_RATE) || Number(BTC_USD_RATE) <= 0) {
+  if (!BTC_USD_RATE || !/^\d+(\.\d+)?$/.test(BTC_USD_RATE) || Number(BTC_USD_RATE) <= 0) {
     return res.status(503).json({ error: "Bitcoin membership checkout is not configured. Set BTC_USD_RATE to the current USD price of one BTC." });
   }
   try {
