@@ -134,13 +134,13 @@ function verifyPassword(password, stored) {
 }
 function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254; }
 
-function amountToAtomic(ngn, rate, decimals) {
+function amountToAtomic(amountCents, rate, decimals) {
   if (!rate || !/^\d+(\.\d+)?$/.test(rate) || Number(rate) <= 0) throw new Error("Crypto rate is not configured.");
   const [whole, fraction = ""] = rate.split(".");
   const scale = 10n ** BigInt(decimals);
   const rateScaled = BigInt(whole) * scale + BigInt((fraction + "0".repeat(decimals)).slice(0, decimals));
   if (rateScaled <= 0n) throw new Error("Invalid crypto rate.");
-  return (BigInt(ngn) * scale * scale) / (rateScaled * 100n);
+  return (BigInt(amountCents) * scale * scale) / (rateScaled * 100n);
 }
 async function getCryptoUsdRate(asset) {
   const envRate = asset === "BTC" ? BTC_USD_RATE : ETH_USD_RATE;
