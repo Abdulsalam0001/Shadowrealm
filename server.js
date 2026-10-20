@@ -407,13 +407,26 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     const expectedAtomic = (roundedBaseAtomic + offset).toString();
     const expectedAmount = formatAtomic(expectedAtomic, config.decimals, config.displayDecimals);
     const order = await prisma.order.create({ data: {
-      orderNumber, customerEmail: email, customerToken: accessToken, totalNgn: 0, totalUsdCents, status: "AWAITING_PAYMENT",
+      orderNumber, customerEmail: email, customerToken: accessToken, customerId: req.customer.id, totalNgn: 0, totalUsdCents, status: "AWAITING_PAYMENT",
       items: { create: normalized.map(i => { const p = catalog.find(x => x.sku === i.sku); return { productSku: p.sku, productName: p.name, quantity: i.quantity, unitPriceNgn: 0, unitPriceUsdCents: p.priceUsdCents }; }) },
       payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
     }, include: { payment: true } });
     res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: asset === "BTC" ? "https://mempool.space" : "https://etherscan.io" }, accessToken });
   } catch (err) { console.error(err); res.status(500).json({ error: "Could not create order." }); }
 });
+app.get("/api/account/orders", customerAuth, async (req, res) => {
+  const orders = await prisma.order.findMany({
+    where: { OR: [{ customerId: req.customer.id }, { customerEmail: req.customer.email }] },
+    include: { items: { select: { productName: true, productSku: true, quantity: true, unitPriceUsdCents: true } }, payment: { select: { asset: true, status: true, expectedAmount: true, txHash: true, confirmations: true } } },
+    orderBy: { createdAt: "desc" }, take: 200
+  });
+  res.json({ orders: orders.map(order => ({
+    ...publicOrder(order),
+    items: order.items,
+    payment: order.payment ? { asset: order.payment.asset, status: order.payment.status, expectedAmount: order.payment.expectedAmount, txHash: order.payment.txHash, confirmations: order.payment.confirmations } : null
+  })) });
+});
+
 app.post("/api/orders/:id/transaction", rateLimit({ windowMs: 60_000, limit: 10 }), async (req, res) => {
   const token = req.get("x-order-token");
   const txHash = String(req.body.txHash || "").trim();
@@ -507,6 +520,34 @@ app.patch("/api/admin/products/:sku", admin, async (req, res) => {
     res.json({ product: { sku: product.sku, name: product.name, description: product.description, priceUsd: product.priceUsdCents / 100, active: product.active, fulfillmentMode: product.fulfillmentMode } });
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json({ error: "Product not found." });
+    throw err;
+  }
+});
+app.get("/api/admin/customers", admin, async (_req, res) => {
+  const customers = await prisma.customer.findMany({
+    orderBy: { createdAt: "desc" }, take: 200,
+    select: { id: true, email: true, createdAt: true, membershipPaidAt: true, membershipVerifiedBy: true, membershipAdminNote: true, _count: { select: { orders: true } } }
+  });
+  res.json({ customers });
+});
+app.patch("/api/admin/customers/:id/verification", admin, async (req, res) => {
+  if (typeof req.body.verified !== "boolean") return res.status(400).json({ error: "verified must be true or false." });
+  const note = String(req.body.note || "").trim().slice(0, 500);
+  if (note.length < 4) return res.status(400).json({ error: "Add a short reason for this verification change." });
+  try {
+    const customer = await prisma.customer.update({
+      where: { id: req.params.id },
+      data: {
+        membershipPaidAt: req.body.verified ? new Date() : null,
+        membershipVerifiedBy: ADMIN_USERNAME,
+        membershipAdminNote: note
+      },
+      select: { id: true, email: true, membershipPaidAt: true, membershipVerifiedBy: true, membershipAdminNote: true }
+    });
+    console.info("Admin membership verification change", JSON.stringify({ customerId: customer.id, verified: Boolean(customer.membershipPaidAt), actor: ADMIN_USERNAME, note, at: new Date().toISOString() }));
+    res.json({ customer });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Customer not found." });
     throw err;
   }
 });
