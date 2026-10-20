@@ -498,6 +498,12 @@ app.patch("/api/admin/orders/:id/review", admin, async (req, res) => {
   await prisma.cryptoPayment.update({ where: { id: order.payment.id }, data: { status: "REVIEW" } });
   res.json({ order: publicOrder(updated) });
 });
+// Serve Benny's static storefront from the same Express process and deployment.
+const bennyPublicDir = path.join(__dirname, "benny-the-dealer", "public");
+app.use("/benny", express.static(bennyPublicDir, { index: false, fallthrough: true }));
+app.get("/benny", (_req, res) => res.redirect(308, "/benny/"));
+app.get("/benny/", (_req, res) => res.sendFile(path.join(bennyPublicDir, "index.html")));
+
 app.get("/hosting", (_req, res) => res.sendFile(path.join(__dirname, "hosting.html")));
 app.get("/servers", (_req, res) => res.sendFile(path.join(__dirname, "servers.html")));
 app.get("/email", (_req, res) => res.sendFile(path.join(__dirname, "email.html")));
