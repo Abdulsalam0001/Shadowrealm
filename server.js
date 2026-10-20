@@ -499,10 +499,10 @@ app.patch("/api/admin/orders/:id/review", admin, async (req, res) => {
   res.json({ order: publicOrder(updated) });
 });
 // Serve Benny's static storefront from the same Express process and deployment.
+// Handle both URL forms directly; do not issue a redirect that can loop behind a proxy.
 const bennyPublicDir = path.join(__dirname, "benny-the-dealer", "public");
+app.get(["/benny", "/benny/"], (_req, res) => res.sendFile(path.join(bennyPublicDir, "index.html")));
 app.use("/benny", express.static(bennyPublicDir, { index: false, fallthrough: true }));
-app.get("/benny", (_req, res) => res.redirect(308, "/benny/"));
-app.get("/benny/", (_req, res) => res.sendFile(path.join(bennyPublicDir, "index.html")));
 
 app.get("/hosting", (_req, res) => res.sendFile(path.join(__dirname, "hosting.html")));
 app.get("/servers", (_req, res) => res.sendFile(path.join(__dirname, "servers.html")));
