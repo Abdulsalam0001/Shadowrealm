@@ -41,4 +41,10 @@ A ready-to-paste Worker script is included at `cloudflare-worker.js`. It uses th
 4. Deploy the existing Shadowrealm Render service from the `benny-the-dealer-build` branch so the `/benny/` mount is available. Do not change its database or payment environment variables.
 5. Verify `https://shop.bennythedealer.org/`, `https://shop.bennythedealer.org/api/health`, and `https://bennythedealer.org/`. The health endpoint should return JSON; do not test payment by submitting a fake transaction.
 
-Cloudflare configuration is managed in the dashboard and is not changed by a Git commit. The script in this repository is a deployable template, not confirmation that DNS or Worker routes have already been published. The Benny inquiry form still posts to `/api/inquiries`, which the current API does not implement.
+Cloudflare configuration is managed in the dashboard and is not changed by a Git commit. The script in this repository is a deployable template, not confirmation that DNS or Worker routes have already been published. The Benny inquiry form posts to `/api/inquiries`. Requests are stored in the `BennyInquiry` table on the existing Neon database and can be reviewed by an authenticated admin at `/api/admin/benny-inquiries`.
+
+## Inquiry migration and privacy
+
+This branch adds the `BennyInquiry` table through `prisma/migrations/20261020150000_benny_inquiries/migration.sql`. Before running the updated application, apply pending migrations to the **existing** Neon database with `npm run db:deploy` (after installing dependencies / generating Prisma Client). Do not create another database. If the Render build command currently does not run migrations, update the existing service's deployment command to run `npm run db:deploy` before starting the app, or apply the migration as a controlled release step.
+
+The inquiry form accepts an optional alias and optional reply channel. Without a reply channel, the request can be reviewed but cannot be answered directly. The admin-only review endpoint is protected by the existing admin session. Do not collect credentials, private keys, identity documents, or production secrets in the form.
