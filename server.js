@@ -394,6 +394,8 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     if (normalized.some(i => !Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 25)) return res.status(400).json({ error: "Invalid product quantity." });
     const totalUsdCents = normalized.reduce((sum, i) => sum + catalog.find(p => p.sku === i.sku).priceUsdCents * i.quantity, 0);
     const config = assets[asset];
+    if (!config.address) return res.status(503).json({ error: asset + " receiving wallet is not configured." });
+    if (asset === "ETH" && !ETH_RPC_URL) return res.status(503).json({ error: "Ethereum verification is not configured yet. Please choose Bitcoin or contact support." });
     let baseAtomic;
     try { const cryptoUsdRate = await getCryptoUsdRate(asset); baseAtomic = amountToAtomic(totalUsdCents, cryptoUsdRate, config.decimals); } catch { return res.status(503).json({ error: "Could not get a live " + asset + "/USD quote. Please retry checkout shortly." }); }
     const orderNumber = "SHR-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
