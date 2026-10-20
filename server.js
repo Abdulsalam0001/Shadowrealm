@@ -498,6 +498,37 @@ app.patch("/api/admin/orders/:id/review", admin, async (req, res) => {
   await prisma.cryptoPayment.update({ where: { id: order.payment.id }, data: { status: "REVIEW" } });
   res.json({ order: publicOrder(updated) });
 });
+
+app.post("/api/inquiries", rateLimit({ windowMs: 15 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
+  const alias = String(req.body.alias || req.body.name || "").trim().slice(0, 80);
+  const contact = String(req.body.contact || req.body.email || "").trim().slice(0, 254);
+  const service = String(req.body.service || "").trim().slice(0, 100);
+  const budget = String(req.body.budget || "").trim().slice(0, 80);
+  const message = String(req.body.message || "").trim().slice(0, 2000);
+  if (String(req.body.company || "").trim()) return res.status(202).json({ message: "If the request passed review, it has been received." });
+  if (req.body.consent !== true && req.body.consent !== "on") return res.status(400).json({ error: "Confirm the request-processing notice to continue." });
+  if (!service || message.length < 10) return res.status(400).json({ error: "Choose a request type and provide at least 10 characters of scope." });
+  if (contact.includes("\\r") || contact.includes("\\n")) return res.status(400).json({ error: "Enter a single-line contact channel." });
+  const reference = "BTD-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
+  try {
+    await prisma.bennyInquiry.create({ data: {
+      reference, alias: alias || null, contact: contact || null, service,
+      budget: budget || null, message, consentAt: new Date()
+    }});
+    return res.status(201).json({ reference, message: contact ? "Request received for review. Keep the reference for follow-up." : "Request received for review. No reply channel was supplied, so it cannot be followed up directly." });
+  } catch (err) {
+    console.error("Benny inquiry intake failed:", err.message);
+    return res.status(500).json({ error: "Request intake is temporarily unavailable. Please try again later." });
+  }
+});
+app.get("/api/admin/benny-inquiries", admin, async (_req, res) => {
+  const inquiries = await prisma.bennyInquiry.findMany({
+    orderBy: { createdAt: "desc" }, take: 100,
+    select: { id: true, reference: true, alias: true, contact: true, service: true, budget: true, message: true, status: true, adminNote: true, createdAt: true }
+  });
+  res.json({ inquiries });
+});
+
 // Serve Benny's static storefront from the same Express process and deployment.
 // Handle both URL forms directly; do not issue a redirect that can loop behind a proxy.
 const bennyPublicDir = path.join(__dirname, "benny-the-dealer", "public");
