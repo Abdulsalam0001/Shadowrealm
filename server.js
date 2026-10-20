@@ -32,12 +32,13 @@ const assets = { BTC: { decimals: 8, displayDecimals: 8, rate: BTC_USD_RATE, add
 const seedProducts = [
   { sku: "toolkit", name: "Developer Toolkit", description: "A curated bundle of practical developer utilities for building, debugging, testing, and maintaining software projects.", priceNgn: 0, priceUsdCents: 850, fulfillmentMode: "MANUAL" },
   { sku: "rdp", name: "RDP Starter", description: "Entry-level remote desktop access for authorised administration, support, and development workflows.", priceNgn: 0, priceUsdCents: 1200, fulfillmentMode: "MANUAL" },
-  { sku: "cpanel", name: "cPanel Basic", description: "Starter web-hosting control panel setup for managing a small website, domains, and hosting tasks.", priceNgn: 0, priceUsdCents: 1800, fulfillmentMode: "MANUAL" },
+  { sku: "cpanel", name: "cPanel Basic", description: "Starter web-hosting control panel setup for managing a small website, domains, and hosting tasks.", priceNgn: 0, priceUsdCents: 1300, fulfillmentMode: "MANUAL" },
   { sku: "smtp", name: "SMTP Launch", description: "Authenticated transactional email setup for verified domains, including configuration guidance for SPF, DKIM, and DMARC.", priceNgn: 0, priceUsdCents: 950, fulfillmentMode: "MANUAL" },
   { sku: "automation", name: "Automation Utility Pack", description: "Workflow utilities for reducing repetitive, authorised business and technical tasks.", priceNgn: 0, priceUsdCents: 600, fulfillmentMode: "MANUAL" },
   { sku: "rdppro", name: "RDP Pro", description: "Higher-capacity remote administration resources for authorised teams, support work, and controlled testing.", priceNgn: 0, priceUsdCents: 2800, fulfillmentMode: "MANUAL" },
   { sku: "cpanelbiz", name: "cPanel Business", description: "Business-grade hosting control panel setup for multi-site administration and client project workflows.", priceNgn: 0, priceUsdCents: 4200, fulfillmentMode: "MANUAL" },
   { sku: "smtpgrowth", name: "SMTP Growth", description: "Expanded authenticated email configuration for verified domains and permission-based communications.", priceNgn: 0, priceUsdCents: 2400, fulfillmentMode: "MANUAL" }
+  { sku: "anti-red-panel", name: "Anti-Red Panel Promotion", description: "A standalone promotional package for lawful press outreach and publication visibility. Scope and placement are reviewed before work begins.", priceNgn: 0, priceUsdCents: 3000, fulfillmentMode: "MANUAL" },
 ];
 
 const ADMIN_SESSION_COOKIE = "shadowrealm_admin";
