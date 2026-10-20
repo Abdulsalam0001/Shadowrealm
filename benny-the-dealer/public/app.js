@@ -33,7 +33,7 @@ form?.addEventListener("submit", async (event) => {
   const data = new FormData(form);
   const payload = Object.fromEntries(data.entries());
   if (!data.get("consent")) {
-    formMessage.textContent = "Please confirm that we may use your details to reply.";
+    formMessage.textContent = "Please confirm that the request can be stored for review.";
     formMessage.className = "form-message error";
     return;
   }
@@ -52,9 +52,9 @@ form?.addEventListener("submit", async (event) => {
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "We couldn't send that just now.");
 
-    formMessage.textContent = result.reference
-      ? `Received. Keep this reference: ${result.reference}. We'll follow up after review.`
-      : (result.message || "Thanks — your request has been received.");
+    formMessage.textContent = result.message || (result.reference
+      ? `Request received for review. Keep this reference: ${result.reference}.`
+      : "Request received for review.");
     formMessage.className = "form-message";
     form.reset();
   } catch (error) {
