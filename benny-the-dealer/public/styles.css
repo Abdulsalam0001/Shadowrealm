@@ -68,3 +68,23 @@ body{background:#0b0910}
 .about-copy{max-width:820px;margin:auto}
 .portrait-frame,.floating-note,.art-orbit{display:none!important}
 @media(max-width:650px){.hero{min-height:430px;padding-top:72px;padding-bottom:72px}.hero h1{font-size:clamp(39px,10vw,58px)}}
+
+/* Inventory and pricing: compact, high-contrast operator catalogue */
+.catalog-section{padding:100px 0;background:radial-gradient(ellipse at 85% 10%,#6d15331f,transparent 35%),#0c0910;border-block:1px solid #512039}
+.benny-price-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.benny-price-card{min-height:230px;padding:18px;border:1px solid #4a2539;background:linear-gradient(145deg,#1b101b,#0d0b12);display:flex;flex-direction:column;position:relative}
+.benny-price-card:before{content:"";position:absolute;inset:0 auto 0 0;width:2px;background:#d43a5b}
+.benny-price-meta{display:flex;justify-content:space-between;gap:7px;color:#df627c;font:8px var(--mono);letter-spacing:.1em}
+.benny-price-meta span:last-child{color:#8e788d;text-align:right}
+.benny-price-card h3{font-size:16px;margin:25px 0 8px;letter-spacing:-.03em}
+.benny-price-card p{color:#aa9eaf;font-size:11px;line-height:1.8;margin:0 0 20px;flex:1}
+.benny-price-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid #382333;padding-top:13px}
+.benny-price-bottom strong{font-size:19px;color:#f4eaf1}
+.benny-price-bottom a{font:9px var(--mono);letter-spacing:.12em;color:#ff7b93;text-transform:uppercase}
+.benny-service-rates{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px}
+.benny-service-rates>div{padding:24px;border:1px solid #54273d;background:#150d18}
+.benny-service-rates h3{font-size:20px;margin:13px 0 8px}
+.benny-service-rates p,.price-disclaimer{font-size:11px;line-height:1.9;color:#aa9eaf}
+.price-disclaimer{margin-top:18px}
+@media(max-width:900px){.benny-price-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.catalog-section{padding:70px 0}.benny-price-grid,.benny-service-rates{grid-template-columns:1fr}.benny-price-card{min-height:0}.benny-price-card h3{margin-top:17px}.benny-service-rates>div{padding:19px}}
