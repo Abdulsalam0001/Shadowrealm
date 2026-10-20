@@ -21,3 +21,36 @@
 .footer-affiliate{color:#b68b9d;margin-left:8px}
 @media(max-width:900px){.shadowrealm-grid{gap:35px}.shadowrealm-art{height:380px}.sr-orbit{width:250px;height:250px}.sr-orbit-b{width:310px;height:310px}.sr-monogram{width:160px;height:160px;font-size:70px}}
 @media(max-width:650px){.shadowrealm-grid{grid-template-columns:1fr;gap:42px;padding-top:78px;padding-bottom:75px}.shadowrealm-art{height:320px;order:2}.shadowrealm-copy{order:1}.shadowrealm-copy h2{font-size:clamp(39px,11vw,52px)}.sr-orbit{width:220px;height:220px}.sr-orbit-b{width:270px;height:270px}.sr-monogram{width:140px;height:140px;font-size:60px}.sr-art-label{font-size:8px}.label-top{left:23px;top:23px}.label-bottom{left:23px;bottom:23px}.sr-coordinate{right:20px;bottom:23px}.sr-bottomline{flex-wrap:wrap;line-height:1.7}.sr-bottomline span:last-child{width:100%}.footer-affiliate{display:block;margin:5px 0 0}.nav a[href="#shadowrealm"]{color:#e2a7b4}}
+
+/* Low-profile operator visual system */
+:root{--shadow-red:#d43a5b;--gold:#d8a5b5;--gold2:#7c3658;--wine:#8c1f43;--line:rgba(222,180,213,.15)}
+body{background:#0b0910}
+.topbar{background:rgba(11,9,16,.94);border-bottom-color:#57243c}
+.nav a[href="https://shop.bennythedealer.org/?ref=benny"]{color:#e7a0b8}
+.hero{grid-template-columns:1fr;min-height:570px;padding-top:110px;padding-bottom:100px;background:radial-gradient(ellipse at 80% 40%,#69203b22,transparent 40%),radial-gradient(ellipse at 20% 80%,#532e7b18,transparent 42%)}
+.hero-art{display:none}
+.hero-copy{max-width:900px}
+.hero h1{max-width:900px}
+.hero-lede{max-width:680px;color:#b4a6bb}
+.hero-proof{color:#93849d}
+.ticker{background:linear-gradient(90deg,#9b2149,#4a286e);border-color:#bb4166;color:#fff0f4}
+.service-card{background:linear-gradient(150deg,#1c1421,#100d15);border-color:#3f293f}
+.service-card:hover{border-color:#a33157}
+.button-gold,.sr-actions .button{background:linear-gradient(110deg,#d93b62,#8e3a78);color:#fff3f6;box-shadow:0 10px 35px #b3254a24}
+.button-gold:hover,.sr-actions .button:hover{filter:brightness(1.13)}
+.about-section{background:#100c15;border-color:#43243e}
+.about-stamp{border-color:#76304d;background:radial-gradient(circle,#281326,#100c15 70%)}
+.stamp-ring{border-color:#d33b62;color:#eaa7bc}
+.stamp-star{color:#d33b62}
+.contact-section{background:linear-gradient(120deg,#21101f,#100b15 62%,#1a0d20);border-color:#54253e}
+.inquiry-form{background:#100c14;border-color:#55263f}
+.inquiry-form input,.inquiry-form select,.inquiry-form textarea{background:#1a1220;border-color:#43253f}
+.inquiry-form input:focus,.inquiry-form select:focus,.inquiry-form textarea:focus{border-color:#d43a5b}
+.shadowrealm-section{background:radial-gradient(ellipse at 15% 48%,#8b1c432b,transparent 36%),radial-gradient(ellipse at 88% 10%,#6438a32b,transparent 36%),linear-gradient(115deg,#0b0910,#160d1a 56%,#100a16);border-color:#632443}
+.shadowrealm-copy h2 em{color:#e66d93}
+.sr-actions .button{background:linear-gradient(110deg,#d93b62,#773c9a)}
+.partner-kicker{color:#d7b0c9}
+.sr-feature-list>div>span{color:#e6537b}
+.footer{background:#0b0910}
+.footer>p{color:#96859e}
+@media(max-width:650px){.hero{padding-top:82px;min-height:500px}.hero h1{font-size:clamp(39px,10vw,58px)}}
