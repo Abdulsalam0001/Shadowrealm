@@ -64,7 +64,8 @@ model Product {
   sku             String          @unique
   name            String
   description     String
-  priceNgn        Int
+  priceNgn        Int             @default(0) // Legacy field retained for existing databases/orders
+  priceUsdCents   Int             @default(500)
   active          Boolean         @default(true)
   fulfillmentMode FulfillmentMode @default(MANUAL)
   createdAt       DateTime        @default(now())
@@ -76,7 +77,8 @@ model Order {
   orderNumber     String      @unique
   customerEmail   String
   customerToken   String      @unique
-  totalNgn        Int
+  totalNgn        Int             @default(0) // Legacy field retained for existing orders
+  totalUsdCents   Int             @default(0)
   type            OrderType    @default(PRODUCT)
   customerId      String?
   customer        Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
@@ -95,7 +97,8 @@ model OrderItem {
   productSku   String
   productName  String
   quantity     Int
-  unitPriceNgn Int
+  unitPriceNgn Int    @default(0) // Legacy field retained for existing orders
+  unitPriceUsdCents Int @default(0)
   order        Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
