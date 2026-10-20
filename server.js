@@ -37,7 +37,7 @@ const seedProducts = [
   { sku: "automation", name: "Automation Utility Pack", description: "Workflow utilities for reducing repetitive, authorised business and technical tasks.", priceNgn: 0, priceUsdCents: 600, fulfillmentMode: "MANUAL" },
   { sku: "rdppro", name: "RDP Pro", description: "Higher-capacity remote administration resources for authorised teams, support work, and controlled testing.", priceNgn: 0, priceUsdCents: 2800, fulfillmentMode: "MANUAL" },
   { sku: "cpanelbiz", name: "cPanel Business", description: "Business-grade hosting control panel setup for multi-site administration and client project workflows.", priceNgn: 0, priceUsdCents: 4200, fulfillmentMode: "MANUAL" },
-  { sku: "smtpgrowth", name: "SMTP Growth", description: "Expanded authenticated email configuration for verified domains and permission-based communications.", priceNgn: 0, priceUsdCents: 2400, fulfillmentMode: "MANUAL" }
+  { sku: "smtpgrowth", name: "SMTP Growth", description: "Expanded authenticated email configuration for verified domains and permission-based communications.", priceNgn: 0, priceUsdCents: 2400, fulfillmentMode: "MANUAL" },
   { sku: "anti-red-panel", name: "Anti-Red Panel Promotion", description: "A standalone promotional package for lawful press outreach and publication visibility. Scope and placement are reviewed before work begins.", priceNgn: 0, priceUsdCents: 3000, fulfillmentMode: "MANUAL" },
 ];
 
