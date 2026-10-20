@@ -138,3 +138,20 @@ model MediaSubmission {
   @@index([status, createdAt])
   @@index([journalistEmail, createdAt])
 }
+
+model BennyInquiry {
+  id        String   @id @default(cuid())
+  reference String   @unique
+  alias     String?
+  contact   String?
+  service   String
+  budget    String?
+  message   String
+  consentAt DateTime
+  status    String   @default("NEW")
+  adminNote String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
