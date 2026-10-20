@@ -11,12 +11,12 @@ The storefront is available on the origin at `/benny/`. Cloudflare can map reque
 ## Files
 
 - `public/index.html` — Benny storefront markup.
-- `public/styles.css` — responsive charcoal, plum, burgundy and gold visual system.
+- `public/styles.css` — responsive low-profile black, crimson, and violet visual system.
 - `public/app.js` — navigation and inquiry form behavior.
 
-## Inquiry form note
+## Inquiry form
 
-The frontend currently posts to `/api/inquiries`, which is not part of the existing Shadowrealm API. The static site can be served without changing the backend, but inquiry submission needs to be explicitly connected to an approved existing endpoint before being advertised as operational. This setup does not add tables, migrate the database, create a second service, or alter payment handling.
+The form posts to `/api/inquiries`. Submissions are stored in the `BennyInquiry` table on the existing Neon database and can be reviewed by an authenticated admin at `/api/admin/benny-inquiries`. The feature adds one isolated table and does not alter Shadowrealm's existing customer authentication, crypto-payment verification, orders, or fulfilment.
 
 Keep all secrets in the existing Render environment. Do not commit `.env` files or database connection strings.
 
@@ -38,7 +38,7 @@ A ready-to-paste Worker script is included at `cloudflare-worker.js`. It uses th
 1. In Cloudflare, open **Workers & Pages** and edit the existing Worker that currently uses `ORIGIN = "https://shadowrealm-yj6v.onrender.com"`. Replace its script with the contents of `cloudflare-worker.js`; do not create a second Worker unless your existing setup cannot accept another route.
 2. Under the Worker’s **Triggers / Routes**, attach `bennythedealer.org/*`, `www.bennythedealer.org/*`, and `shop.bennythedealer.org/*` to that same Worker.
 3. In **DNS**, add a `shop` CNAME record targeting `shadowrealm-yj6v.onrender.com` and enable the orange-cloud proxy. Keep existing apex and `www` DNS records unchanged.
-4. Deploy the existing Shadowrealm Render service from the `benny-the-dealer-build` branch so the `/benny/` mount is available. Do not change its database or payment environment variables.
+4. Apply the new `BennyInquiry` migration to the existing Neon database with `npm run db:deploy`, then deploy the existing Shadowrealm Render service from the `benny-the-dealer-build` branch so the `/benny/` mount and inquiry endpoint are available. Keep existing database credentials and payment environment variables unchanged.
 5. Verify `https://shop.bennythedealer.org/`, `https://shop.bennythedealer.org/api/health`, and `https://bennythedealer.org/`. The health endpoint should return JSON; do not test payment by submitting a fake transaction.
 
 Cloudflare configuration is managed in the dashboard and is not changed by a Git commit. The script in this repository is a deployable template, not confirmation that DNS or Worker routes have already been published. The Benny inquiry form posts to `/api/inquiries`. Requests are stored in the `BennyInquiry` table on the existing Neon database and can be reviewed by an authenticated admin at `/api/admin/benny-inquiries`.
