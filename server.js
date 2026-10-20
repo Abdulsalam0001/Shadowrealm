@@ -508,7 +508,7 @@ app.post("/api/inquiries", rateLimit({ windowMs: 15 * 60_000, limit: 5, standard
   if (String(req.body.company || "").trim()) return res.status(202).json({ message: "If the request passed review, it has been received." });
   if (req.body.consent !== true && req.body.consent !== "on") return res.status(400).json({ error: "Confirm the request-processing notice to continue." });
   if (!service || message.length < 10) return res.status(400).json({ error: "Choose a request type and provide at least 10 characters of scope." });
-  if (contact.includes("\\r") || contact.includes("\\n")) return res.status(400).json({ error: "Enter a single-line contact channel." });
+  if (contact.includes(String.fromCharCode(13)) || contact.includes(String.fromCharCode(10))) return res.status(400).json({ error: "Enter a single-line contact channel." });
   const reference = "BTD-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
   try {
     await prisma.bennyInquiry.create({ data: {
