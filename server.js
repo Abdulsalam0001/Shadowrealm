@@ -31,14 +31,14 @@ const FULFILLMENT_WEBHOOK_SECRET = process.env.FULFILLMENT_WEBHOOK_SECRET || "";
 const assets = { BTC: { decimals: 8, displayDecimals: 8, rate: BTC_RATE, address: BTC_ADDRESS }, ETH: { decimals: 18, displayDecimals: 8, rate: ETH_RATE, address: ETH_ADDRESS } };
 
 const seedProducts = [
-  { sku: "toolkit", name: "Developer Toolkit", description: "Productivity utilities for development work.", priceNgn: 850000, fulfillmentMode: "MANUAL" },
-  { sku: "rdp", name: "RDP Starter", description: "Remote desktop for authorized access and workflows.", priceNgn: 1200000, fulfillmentMode: "MANUAL" },
-  { sku: "cpanel", name: "cPanel Basic", description: "Starter web hosting with a control panel.", priceNgn: 1800000, fulfillmentMode: "MANUAL" },
-  { sku: "smtp", name: "SMTP Launch", description: "Authenticated email setup for legitimate transactional mail.", priceNgn: 950000, fulfillmentMode: "MANUAL" },
-  { sku: "automation", name: "Automation Utility Pack", description: "Workflow helpers for authorized business operations.", priceNgn: 600000, fulfillmentMode: "MANUAL" },
-  { sku: "rdppro", name: "RDP Pro", description: "Remote administration and testing resources.", priceNgn: 2800000, fulfillmentMode: "MANUAL" },
-  { sku: "cpanelbiz", name: "cPanel Business", description: "Hosting for business websites and client projects.", priceNgn: 4200000, fulfillmentMode: "MANUAL" },
-  { sku: "smtpgrowth", name: "SMTP Growth", description: "Email delivery for verified domains and opted-in lists.", priceNgn: 2400000, fulfillmentMode: "MANUAL" }
+  { sku: "toolkit", name: "Developer Toolkit", description: "A curated bundle of practical developer utilities for building, debugging, testing, and maintaining software projects.", priceNgn: 850000, fulfillmentMode: "MANUAL" },
+  { sku: "rdp", name: "RDP Starter", description: "Entry-level remote desktop access for authorised administration, support, and development workflows.", priceNgn: 1200000, fulfillmentMode: "MANUAL" },
+  { sku: "cpanel", name: "cPanel Basic", description: "Starter web-hosting control panel setup for managing a small website, domains, and hosting tasks.", priceNgn: 1800000, fulfillmentMode: "MANUAL" },
+  { sku: "smtp", name: "SMTP Launch", description: "Authenticated transactional email setup for verified domains, including configuration guidance for SPF, DKIM, and DMARC.", priceNgn: 950000, fulfillmentMode: "MANUAL" },
+  { sku: "automation", name: "Automation Utility Pack", description: "Workflow utilities for reducing repetitive, authorised business and technical tasks.", priceNgn: 600000, fulfillmentMode: "MANUAL" },
+  { sku: "rdppro", name: "RDP Pro", description: "Higher-capacity remote administration resources for authorised teams, support work, and controlled testing.", priceNgn: 2800000, fulfillmentMode: "MANUAL" },
+  { sku: "cpanelbiz", name: "cPanel Business", description: "Business-grade hosting control panel setup for multi-site administration and client project workflows.", priceNgn: 4200000, fulfillmentMode: "MANUAL" },
+  { sku: "smtpgrowth", name: "SMTP Growth", description: "Expanded authenticated email configuration for verified domains and permission-based communications.", priceNgn: 2400000, fulfillmentMode: "MANUAL" }
 ];
 
 const ADMIN_SESSION_COOKIE = "shadowrealm_admin";
@@ -549,7 +549,7 @@ app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ 
 
 async function main() {
   await prisma.$connect();
-  for (const p of seedProducts) await prisma.product.upsert({ where: { sku: p.sku }, update: {}, create: p });
+  for (const p of seedProducts) await prisma.product.upsert({ where: { sku: p.sku }, update: { name: p.name, description: p.description }, create: p });
   app.listen(PORT, () => console.log("Shadowrealm listening on " + PORT));
   setInterval(async () => {
     const pending = await prisma.cryptoPayment.findMany({ where: { txHash: { not: null }, status: { in: ["SUBMITTED", "CONFIRMING"] } }, select: { id: true }, take: 100 });
