@@ -142,6 +142,16 @@ function amountToAtomic(ngn, rate, decimals) {
   if (rateScaled <= 0n) throw new Error("Invalid crypto rate.");
   return (BigInt(ngn) * scale * scale) / (rateScaled * 100n);
 }
+async function getCryptoUsdRate(asset) {
+  const envRate = asset === "BTC" ? BTC_USD_RATE : ETH_USD_RATE;
+  if (envRate && /^\d+(\.\d+)?$/.test(envRate) && Number(envRate) > 0) return envRate;
+  const response = await fetch("https://api.coinbase.com/v2/prices/" + asset + "-USD/spot", { signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new Error("Live " + asset + "/USD quote unavailable.");
+  const quote = await response.json();
+  const rate = String(quote?.data?.amount || "");
+  if (!/^\d+(\.\d+)?$/.test(rate) || Number(rate) <= 0) throw new Error("Invalid " + asset + "/USD quote.");
+  return rate;
+}
 function formatAtomic(atomic, decimals, displayDecimals = decimals) {
   const n = BigInt(atomic), scale = 10n ** BigInt(decimals);
   const whole = n / scale;
@@ -355,7 +365,7 @@ app.post("/api/membership/invoice", customerAuth, rateLimit({ windowMs: 60_000, 
     const orderNumber = "SHR-MEM-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
     const order = await prisma.order.create({ data: {
       orderNumber, customerEmail: req.customer.email, customerToken: accessToken,
-      customerId: req.customer.id, type: "MEMBERSHIP", totalNgn: 0, status: "AWAITING_PAYMENT",
+      customerId: req.customer.id, type: "MEMBERSHIP", totalNgn: 0, totalUsdCents: 2000, status: "AWAITING_PAYMENT",
       payment: { create: { asset: "BTC", address: BTC_ADDRESS, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
     }, include: { payment: true } });
     res.status(201).json({ order: publicOrder(order), accessToken, membershipPriceUsd: 20, payment: { asset: "BTC", address: BTC_ADDRESS, expectedAmount, status: order.payment.status, explorer: "https://mempool.space" } });
@@ -385,7 +395,7 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     const totalUsdCents = normalized.reduce((sum, i) => sum + catalog.find(p => p.sku === i.sku).priceUsdCents * i.quantity, 0);
     const config = assets[asset];
     let baseAtomic;
-    try { baseAtomic = amountToAtomic(totalUsdCents, config.rate, config.decimals); } catch { return res.status(503).json({ error: asset + " checkout is not configured. Contact support." }); }
+    try { const cryptoUsdRate = await getCryptoUsdRate(asset); baseAtomic = amountToAtomic(totalUsdCents, cryptoUsdRate, config.decimals); } catch { return res.status(503).json({ error: "Could not get a live " + asset + "/USD quote. Please retry checkout shortly." }); }
     const orderNumber = "SHR-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
     const accessToken = randomToken();
     // Small per-order increment enables matching shared-wallet deposits; the exact amount is shown before payment.
