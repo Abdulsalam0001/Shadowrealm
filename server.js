@@ -17,9 +17,8 @@ app.use("/api", rateLimit({ windowMs: 60_000, limit: 100, standardHeaders: true,
 const PORT = Number(process.env.PORT || 3000);
 const BTC_ADDRESS = process.env.BTC_RECEIVING_ADDRESS || "bc1qzwsza9hzcaa36avgv5qu6kts4k52wvx2m4cpgv";
 const ETH_ADDRESS = (process.env.ETH_RECEIVING_ADDRESS || "0x2bAE0972099c92463ec38A1bC11b8856892388eC").toLowerCase();
-const BTC_RATE = process.env.BTC_NGN_RATE || "";
 const BTC_USD_RATE = process.env.BTC_USD_RATE || "";
-const ETH_RATE = process.env.ETH_NGN_RATE || "";
+const ETH_USD_RATE = process.env.ETH_USD_RATE || "";
 const BTC_CONFIRMATIONS = Number(process.env.BTC_REQUIRED_CONFIRMATIONS || 2);
 const ETH_CONFIRMATIONS = Number(process.env.ETH_REQUIRED_CONFIRMATIONS || 12);
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "";
@@ -28,17 +27,17 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || "";
 const FULFILLMENT_WEBHOOK_URL = process.env.FULFILLMENT_WEBHOOK_URL || "";
 const FULFILLMENT_WEBHOOK_SECRET = process.env.FULFILLMENT_WEBHOOK_SECRET || "";
-const assets = { BTC: { decimals: 8, displayDecimals: 8, rate: BTC_RATE, address: BTC_ADDRESS }, ETH: { decimals: 18, displayDecimals: 8, rate: ETH_RATE, address: ETH_ADDRESS } };
+const assets = { BTC: { decimals: 8, displayDecimals: 8, rate: BTC_USD_RATE, address: BTC_ADDRESS }, ETH: { decimals: 18, displayDecimals: 8, rate: ETH_USD_RATE, address: ETH_ADDRESS } };
 
 const seedProducts = [
-  { sku: "toolkit", name: "Developer Toolkit", description: "A curated bundle of practical developer utilities for building, debugging, testing, and maintaining software projects.", priceNgn: 850000, fulfillmentMode: "MANUAL" },
-  { sku: "rdp", name: "RDP Starter", description: "Entry-level remote desktop access for authorised administration, support, and development workflows.", priceNgn: 1200000, fulfillmentMode: "MANUAL" },
-  { sku: "cpanel", name: "cPanel Basic", description: "Starter web-hosting control panel setup for managing a small website, domains, and hosting tasks.", priceNgn: 1800000, fulfillmentMode: "MANUAL" },
-  { sku: "smtp", name: "SMTP Launch", description: "Authenticated transactional email setup for verified domains, including configuration guidance for SPF, DKIM, and DMARC.", priceNgn: 950000, fulfillmentMode: "MANUAL" },
-  { sku: "automation", name: "Automation Utility Pack", description: "Workflow utilities for reducing repetitive, authorised business and technical tasks.", priceNgn: 600000, fulfillmentMode: "MANUAL" },
-  { sku: "rdppro", name: "RDP Pro", description: "Higher-capacity remote administration resources for authorised teams, support work, and controlled testing.", priceNgn: 2800000, fulfillmentMode: "MANUAL" },
-  { sku: "cpanelbiz", name: "cPanel Business", description: "Business-grade hosting control panel setup for multi-site administration and client project workflows.", priceNgn: 4200000, fulfillmentMode: "MANUAL" },
-  { sku: "smtpgrowth", name: "SMTP Growth", description: "Expanded authenticated email configuration for verified domains and permission-based communications.", priceNgn: 2400000, fulfillmentMode: "MANUAL" }
+  { sku: "toolkit", name: "Developer Toolkit", description: "A curated bundle of practical developer utilities for building, debugging, testing, and maintaining software projects.", priceNgn: 0, priceUsdCents: 850, fulfillmentMode: "MANUAL" },
+  { sku: "rdp", name: "RDP Starter", description: "Entry-level remote desktop access for authorised administration, support, and development workflows.", priceNgn: 0, priceUsdCents: 1200, fulfillmentMode: "MANUAL" },
+  { sku: "cpanel", name: "cPanel Basic", description: "Starter web-hosting control panel setup for managing a small website, domains, and hosting tasks.", priceNgn: 0, priceUsdCents: 1800, fulfillmentMode: "MANUAL" },
+  { sku: "smtp", name: "SMTP Launch", description: "Authenticated transactional email setup for verified domains, including configuration guidance for SPF, DKIM, and DMARC.", priceNgn: 0, priceUsdCents: 950, fulfillmentMode: "MANUAL" },
+  { sku: "automation", name: "Automation Utility Pack", description: "Workflow utilities for reducing repetitive, authorised business and technical tasks.", priceNgn: 0, priceUsdCents: 600, fulfillmentMode: "MANUAL" },
+  { sku: "rdppro", name: "RDP Pro", description: "Higher-capacity remote administration resources for authorised teams, support work, and controlled testing.", priceNgn: 0, priceUsdCents: 2800, fulfillmentMode: "MANUAL" },
+  { sku: "cpanelbiz", name: "cPanel Business", description: "Business-grade hosting control panel setup for multi-site administration and client project workflows.", priceNgn: 0, priceUsdCents: 4200, fulfillmentMode: "MANUAL" },
+  { sku: "smtpgrowth", name: "SMTP Growth", description: "Expanded authenticated email configuration for verified domains and permission-based communications.", priceNgn: 0, priceUsdCents: 2400, fulfillmentMode: "MANUAL" }
 ];
 
 const ADMIN_SESSION_COOKIE = "shadowrealm_admin";
@@ -151,7 +150,7 @@ function formatAtomic(atomic, decimals, displayDecimals = decimals) {
 }
 function randomToken() { return crypto.randomBytes(32).toString("hex"); }
 function publicOrder(order) {
-  return { id: order.id, orderNumber: order.orderNumber, type: order.type, status: order.status, totalNgn: order.totalNgn / 100, createdAt: order.createdAt };
+  return { id: order.id, orderNumber: order.orderNumber, type: order.type, status: order.status, totalUsd: (order.totalUsdCents || 0) / 100, createdAt: order.createdAt };
 }
 async function rpc(method, params) {
   if (!ETH_RPC_URL) throw new Error("ETH_RPC_URL is not configured.");
@@ -367,8 +366,8 @@ app.post("/api/membership/invoice", customerAuth, rateLimit({ windowMs: 60_000, 
 
 app.get("/api/products", customerAuth, async (req, res) => {
   const fullMember = Boolean(req.customer.membershipPaidAt);
-  const products = await prisma.product.findMany({ where: { active: true }, orderBy: { sku: "asc" }, take: fullMember ? undefined : 2, select: { sku: true, name: true, description: true, priceNgn: true, fulfillmentMode: true } });
-  res.json({ products: products.map(p => ({ ...p, priceNgn: p.priceNgn / 100 })), membershipRequired: !fullMember, membershipPaidAt: req.customer.membershipPaidAt || null });
+  const products = await prisma.product.findMany({ where: { active: true }, orderBy: { sku: "asc" }, take: fullMember ? undefined : 2, select: { sku: true, name: true, description: true, priceUsdCents: true, fulfillmentMode: true } });
+  res.json({ products: products.map(p => ({ sku: p.sku, name: p.name, description: p.description, priceUsd: p.priceUsdCents / 100, fulfillmentMode: p.fulfillmentMode })), membershipRequired: !fullMember, membershipPaidAt: req.customer.membershipPaidAt || null });
 });
 app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 }), async (req, res) => {
   if (!req.customer.membershipPaidAt) return res.status(403).json({ error: "Full catalogue ordering requires verified $20 Bitcoin membership." });
@@ -382,10 +381,10 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     if (catalog.length !== new Set(items.map(i => String(i.sku))).size) return res.status(400).json({ error: "A product is unavailable." });
     const normalized = items.map(i => ({ sku: String(i.sku), quantity: Number(i.quantity) }));
     if (normalized.some(i => !Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 25)) return res.status(400).json({ error: "Invalid product quantity." });
-    const totalNgn = normalized.reduce((sum, i) => sum + catalog.find(p => p.sku === i.sku).priceNgn * i.quantity, 0);
+    const totalUsdCents = normalized.reduce((sum, i) => sum + catalog.find(p => p.sku === i.sku).priceUsdCents * i.quantity, 0);
     const config = assets[asset];
     let baseAtomic;
-    try { baseAtomic = amountToAtomic(totalNgn, config.rate, config.decimals); } catch { return res.status(503).json({ error: asset + " checkout is not configured. Contact support." }); }
+    try { baseAtomic = amountToAtomic(totalUsdCents, config.rate, config.decimals); } catch { return res.status(503).json({ error: asset + " checkout is not configured. Contact support." }); }
     const orderNumber = "SHR-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
     const accessToken = randomToken();
     // Small per-order increment enables matching shared-wallet deposits; the exact amount is shown before payment.
@@ -395,8 +394,8 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     const expectedAtomic = (roundedBaseAtomic + offset).toString();
     const expectedAmount = formatAtomic(expectedAtomic, config.decimals, config.displayDecimals);
     const order = await prisma.order.create({ data: {
-      orderNumber, customerEmail: email, customerToken: accessToken, totalNgn, status: "AWAITING_PAYMENT",
-      items: { create: normalized.map(i => { const p = catalog.find(x => x.sku === i.sku); return { productSku: p.sku, productName: p.name, quantity: i.quantity, unitPriceNgn: p.priceNgn }; }) },
+      orderNumber, customerEmail: email, customerToken: accessToken, totalNgn: 0, totalUsdCents, status: "AWAITING_PAYMENT",
+      items: { create: normalized.map(i => { const p = catalog.find(x => x.sku === i.sku); return { productSku: p.sku, productName: p.name, quantity: i.quantity, unitPriceNgn: 0, unitPriceUsdCents: p.priceUsdCents }; }) },
       payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
     }, include: { payment: true } });
     res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: asset === "BTC" ? "https://mempool.space" : "https://etherscan.io" }, accessToken });
@@ -451,14 +450,33 @@ app.post("/api/admin/logout", (_req, res) => {
 });
 app.get("/api/admin/products", admin, async (_req, res) => {
   const products = await prisma.product.findMany({ orderBy: { sku: "asc" } });
-  res.json({ products: products.map(p => ({ ...p, priceNgn: p.priceNgn / 100 })) });
+  res.json({ products: products.map(p => ({ sku: p.sku, name: p.name, description: p.description, priceUsd: p.priceUsdCents / 100, active: p.active, fulfillmentMode: p.fulfillmentMode, updatedAt: p.updatedAt })) });
+});
+app.post("/api/admin/products", admin, async (req, res) => {
+  const sku = String(req.body.sku || "").trim().toLowerCase();
+  const name = String(req.body.name || "").trim();
+  const description = String(req.body.description || "").trim();
+  const price = Number(req.body.priceUsd);
+  const fulfillmentMode = String(req.body.fulfillmentMode || "MANUAL");
+  if (!/^[a-z0-9][a-z0-9-]{1,49}$/.test(sku)) return res.status(400).json({ error: "SKU must be 2–50 lowercase letters, numbers or hyphens." });
+  if (!name || name.length > 120) return res.status(400).json({ error: "Product name is required (max 120 characters)." });
+  if (!description || description.length > 1000) return res.status(400).json({ error: "Description is required (max 1000 characters)." });
+  if (!Number.isFinite(price) || price <= 0 || price > 1000000) return res.status(400).json({ error: "Price must be a positive USD amount." });
+  if (!["AUTO", "MANUAL"].includes(fulfillmentMode)) return res.status(400).json({ error: "Choose manual or automatic fulfilment." });
+  try {
+    const product = await prisma.product.create({ data: { sku, name, description, priceNgn: 0, priceUsdCents: Math.round(price * 100), fulfillmentMode, active: req.body.active !== false } });
+    res.status(201).json({ product: { sku: product.sku, name: product.name, description: product.description, priceUsd: product.priceUsdCents / 100, active: product.active, fulfillmentMode: product.fulfillmentMode } });
+  } catch (err) {
+    if (err.code === "P2002") return res.status(409).json({ error: "That SKU already exists." });
+    throw err;
+  }
 });
 app.patch("/api/admin/products/:sku", admin, async (req, res) => {
   const data = {};
-  if (req.body.priceNgn !== undefined) {
-    const price = Number(req.body.priceNgn);
-    if (!Number.isFinite(price) || price <= 0 || price > 100000000) return res.status(400).json({ error: "Invalid product price." });
-    data.priceNgn = Math.round(price * 100);
+  if (req.body.priceUsd !== undefined) {
+    const price = Number(req.body.priceUsd);
+    if (!Number.isFinite(price) || price <= 0 || price > 1000000) return res.status(400).json({ error: "Price must be a positive USD amount." });
+    data.priceUsdCents = Math.round(price * 100);
   }
   if (req.body.active !== undefined) {
     if (typeof req.body.active !== "boolean") return res.status(400).json({ error: "active must be a boolean." });
@@ -473,7 +491,7 @@ app.patch("/api/admin/products/:sku", admin, async (req, res) => {
   if (!Object.keys(data).length) return res.status(400).json({ error: "No valid product fields supplied." });
   try {
     const product = await prisma.product.update({ where: { sku: req.params.sku }, data });
-    res.json({ product: { ...product, priceNgn: product.priceNgn / 100 } });
+    res.json({ product: { sku: product.sku, name: product.name, description: product.description, priceUsd: product.priceUsdCents / 100, active: product.active, fulfillmentMode: product.fulfillmentMode } });
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json({ error: "Product not found." });
     throw err;
@@ -549,7 +567,7 @@ app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ 
 
 async function main() {
   await prisma.$connect();
-  for (const p of seedProducts) await prisma.product.upsert({ where: { sku: p.sku }, update: { name: p.name, description: p.description }, create: p });
+  for (const p of seedProducts) await prisma.product.upsert({ where: { sku: p.sku }, update: {}, create: p });
   app.listen(PORT, () => console.log("Shadowrealm listening on " + PORT));
   setInterval(async () => {
     const pending = await prisma.cryptoPayment.findMany({ where: { txHash: { not: null }, status: { in: ["SUBMITTED", "CONFIRMING"] } }, select: { id: true }, take: 100 });
