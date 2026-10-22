@@ -358,7 +358,7 @@ app.patch("/api/admin/media-submissions/:id", admin, async (req, res) => {
     throw err;
   }
 });
-app.get("/api/health", (_req, res) => res.json({ ok: true, databaseConfigured: Boolean(process.env.DATABASE_URL), crypto: { BTC: Boolean(BTC_USD_RATE), ETH: Boolean(ETH_USD_RATE && ETH_RPC_URL) } }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, databaseConfigured: Boolean(process.env.DATABASE_URL), crypto: { BTC: true, ETH: Boolean(ETH_RPC_URL), ETHManualReviewAvailable: true, liveQuoteFallback: "Coinbase then CoinGecko" } }));
 app.post("/api/auth/register", rateLimit({ windowMs: 15 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
   if (CUSTOMER_SESSION_SECRET.length < 32) return res.status(503).json({ error: "Customer sign-in is not configured yet." });
   const email = String(req.body.email || "").trim().toLowerCase(), password = String(req.body.password || "");
