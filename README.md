@@ -21,7 +21,7 @@ Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy
 3. Optionally set `BTC_USD_RATE` and `ETH_USD_RATE` as numeric USD-per-coin rates. Otherwise the server requests a live Coinbase quote and falls back to CoinGecko. Stablecoin and altcoin rates use those live quote sources too.
 4. Set `ETH_RPC_URL` to a reliable Ethereum mainnet RPC endpoint for automatic ETH verification. If it is absent, ETH invoices remain available but require manual review. Set `BTC_RECEIVING_ADDRESS` and `ETH_RECEIVING_ADDRESS` in Render to change the fixed BTC/ETH wallets; these are intentionally read-only in `/admin`.
 5. Deploy with the included Render blueprint. The build command applies Prisma migrations.
-6. Visit `/api/health` and confirm `crypto.BTC` and `crypto.ETH` are true before testing checkout.
+6. Visit `/api/health` and confirm `databaseConfigured` is true. `crypto.ETH` is true when `ETH_RPC_URL` enables automatic verification; otherwise ETH payments are held for manual review.
 7. In `/admin` → **Crypto payment wallets**, paste a receiving address for each desired non-BTC/ETH network and enable it. Wallet addresses are stored in Neon; do not enable a network until you have confirmed the address and network. Keep secrets only in Render environment variables; never add `.env` to Git.
 
 ## First database migration
@@ -43,7 +43,7 @@ The initial migration is included in `prisma/migrations`. Render runs `prisma mi
 - `PATCH /api/admin/products/:sku` — an authenticated admin session; accepts `priceUsd`, `active`, `name`, `description`, and `fulfillmentMode` (`AUTO` or `MANUAL`).
 - `GET /api/admin/payment-wallets` and `PUT /api/admin/payment-wallets/:asset` — manage non-BTC/ETH receiving wallets.
 - `GET /api/admin/orders` — an authenticated admin session.
-- `PATCH /api/admin/orders/:id/fulfill` — an authenticated admin session; only chain-verified paid orders may be fulfilled.
+- `PATCH /api/admin/orders/:id/fulfill` — an authenticated admin session; only paid orders may be fulfilled after automatic blockchain verification or explicit admin review.
 - `PATCH /api/admin/orders/:id/review` — an authenticated admin session
 
 ## Shared receiving addresses and payment matching
