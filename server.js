@@ -540,6 +540,35 @@ app.get("/api/account/orders", customerAuth, async (req, res) => {
   })) });
 });
 
+// Resume an unpaid order using the original invoice; do not create a duplicate charge.
+app.get("/api/account/orders/:id/resume", customerAuth, async (req, res) => {
+  const order = await prisma.order.findFirst({
+    where: { id: req.params.id, OR: [{ customerId: req.customer.id }, { customerEmail: req.customer.email }] },
+    include: { payment: true }
+  });
+  if (!order || !order.payment) return res.status(404).json({ error: "Purchase not found for this account." });
+  if (["PAID", "FULFILLED", "FULFILLMENT_PENDING"].includes(order.status) || order.payment.status === "PAID") {
+    return res.status(409).json({ error: "This order is already paid. Open the purchase details to check fulfilment." });
+  }
+  if (order.status !== "AWAITING_PAYMENT" || order.payment.status !== "AWAITING_PAYMENT" || order.payment.txHash) {
+    return res.status(409).json({ error: "This payment has already been submitted or is under review. Check the order status instead of sending a second payment." });
+  }
+  const meta = assetMeta[order.payment.asset] || {};
+  res.json({
+    order: publicOrder(order),
+    payment: {
+      asset: order.payment.asset,
+      address: order.payment.address,
+      expectedAmount: order.payment.expectedAmount,
+      status: order.payment.status,
+      txHash: order.payment.txHash,
+      explorer: meta.explorer || null,
+      verification: verificationMode(order.payment.asset),
+      accessToken: order.customerToken
+    }
+  });
+});
+
 // A signed-in customer may only view an order attached to their own account/email.
 // Delivery notes are exposed only after fulfilment so internal payment-review notes stay private.
 app.get("/api/account/orders/:id", customerAuth, async (req, res) => {
