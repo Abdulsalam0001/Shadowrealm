@@ -663,7 +663,7 @@ app.patch("/api/admin/customers/:id/verification", admin, async (req, res) => {
 });
 app.get("/api/admin/orders", admin, async (_req, res) => {
   const orders = await prisma.order.findMany({ include: { items: true, payment: true }, orderBy: { createdAt: "desc" }, take: 100 });
-  res.json({ orders: orders.map(({ customerToken, ...order }) => order) });
+  res.json({ orders: orders.map(({ customerToken, ...order }) => ({ ...order, payment: order.payment ? { ...order.payment, verification: verificationMode(order.payment.asset) } : null })) });
 });
 app.get("/api/admin/payment-wallets", admin, async (_req, res) => {
   const wallets = await prisma.paymentWallet.findMany({ orderBy: { asset: "asc" } });
@@ -697,6 +697,7 @@ app.post("/api/admin/orders/:id/confirm-payment", admin, async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { payment: true, items: true } });
   if (!order) return res.status(404).json({ error: "Order not found." });
   if (!order.payment || !order.payment.txHash) return res.status(409).json({ error: "A transaction hash must be submitted before manual confirmation." });
+  if (verificationMode(order.payment.asset) !== "manual-review") return res.status(403).json({ error: "This payment uses automatic blockchain verification; manual confirmation is disabled." });
   if (["PAID", "FULFILLED"].includes(order.status)) return res.json({ order: publicOrder(order), message: "Payment was already confirmed." });
   const payment = await prisma.cryptoPayment.update({ where: { id: order.payment.id }, data: { status: "PAID", lastCheckedAt: new Date() } });
   const updated = await prisma.order.update({ where: { id: order.id }, data: { status: "PAID", fulfillmentNote: ((order.fulfillmentNote || "") + "\\nManual payment confirmation by " + ADMIN_USERNAME + ": " + note).slice(0, 2000) } });
