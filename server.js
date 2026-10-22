@@ -49,12 +49,15 @@ async function getAssetConfig(asset) {
   const wallet = await prisma.paymentWallet.findUnique({ where: { asset } });
   return wallet?.enabled && wallet.address?.trim() ? { ...meta, address: wallet.address.trim(), rate: "" } : null;
 }
+function verificationMode(asset) {
+  return asset === "BTC" || (asset === "ETH" && Boolean(ETH_RPC_URL)) ? "blockchain-check" : "manual-review";
+}
 async function listPaymentMethods() {
   const wallets = await prisma.paymentWallet.findMany({ where: { enabled: true } });
   const configured = new Set(wallets.filter(w => w.address.trim()).map(w => w.asset));
   return Object.entries(assetMeta).filter(([asset, meta]) => meta.fixedAddress || configured.has(asset)).map(([asset, meta]) => ({
     asset, label: meta.label, network: meta.network, symbol: meta.symbol, addressConfigured: true,
-    verification: ["BTC", "ETH"].includes(asset) ? "blockchain-check" : "manual-review"
+    verification: verificationMode(asset)
   }));
 }
 
@@ -246,7 +249,7 @@ async function verifyTransaction(payment) {
 async function checkPayment(paymentId) {
   const payment = await prisma.cryptoPayment.findUnique({ where: { id: paymentId }, include: { order: { include: { items: true } } } });
   if (!payment || !payment.txHash || ["PAID", "FULFILLED", "REVIEW"].includes(payment.status)) return;
-  if (!["BTC", "ETH"].includes(payment.asset)) {
+  if (payment.asset !== "BTC" && !(payment.asset === "ETH" && ETH_RPC_URL)) {
     await prisma.cryptoPayment.update({ where: { id: payment.id }, data: { status: "SUBMITTED", lastCheckedAt: new Date() } });
     await prisma.order.update({ where: { id: payment.orderId }, data: { status: "PAYMENT_SUBMITTED" } });
     return;
@@ -461,7 +464,7 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     if (normalized.some(i => !Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 25)) return res.status(400).json({ error: "Invalid product quantity." });
     const totalUsdCents = normalized.reduce((sum, i) => sum + catalog.find(p => p.sku === i.sku).priceUsdCents * i.quantity, 0);
     // Verified membership unlocks all orders. Without membership, allow direct product
-    // checkout only when the server-calculated order total is at least $20.
+    // checkout only when the server-calculated order total is more than $20.
     if (!req.customer.membershipPaidAt && totalUsdCents <= 2000) {
       return res.status(403).json({ error: "Direct checkout requires a product or order total of more than $20.00, or verified membership." });
     }
@@ -482,7 +485,7 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
       items: { create: normalized.map(i => { const p = catalog.find(x => x.sku === i.sku); return { productSku: p.sku, productName: p.name, quantity: i.quantity, unitPriceNgn: 0, unitPriceUsdCents: p.priceUsdCents }; }) },
       payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
     }, include: { payment: true } });
-    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: config.explorer, verification: ["BTC", "ETH"].includes(asset) ? "blockchain-check" : "manual-review" }, accessToken });
+    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: config.explorer, verification: verificationMode(asset) }, accessToken });
   } catch (err) { console.error(err); res.status(500).json({ error: "Could not create order." }); }
 });
 app.post("/api/orders/smtp", customerAuth, rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
@@ -517,7 +520,7 @@ app.post("/api/orders/smtp", customerAuth, rateLimit({ windowMs: 60_000, limit: 
       items: { create: [{ productSku: product.sku, productName: product.name, quantity: 1, unitPriceNgn: 0, unitPriceUsdCents: product.priceUsdCents }] },
       payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
     }, include: { payment: true, items: true } });
-    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: config.explorer, verification: ["BTC", "ETH"].includes(asset) ? "blockchain-check" : "manual-review" }, accessToken, message: "Order created. The domain and use case are reviewed before activation; fulfilment timing may vary." });
+    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: config.explorer, verification: verificationMode(asset) }, accessToken, message: "Order created. The domain and use case are reviewed before activation; fulfilment timing may vary." });
   } catch (err) { console.error("Authenticated SMTP order failed:", err.message); res.status(500).json({ error: "Could not create the SMTP order. Please try again later." }); }
 });
 
@@ -547,7 +550,7 @@ app.post("/api/orders/:id/transaction", rateLimit({ windowMs: 60_000, limit: 10 
     await prisma.order.update({ where: { id: order.id }, data: { status: "PAYMENT_SUBMITTED" } });
     await checkPayment(updated.id);
     const fresh = await prisma.order.findUnique({ where: { id: order.id }, include: { payment: true } });
-    res.json({ status: fresh.status, paymentStatus: fresh.payment.status, confirmations: fresh.payment.confirmations, requiredConfirmations: fresh.payment.asset === "BTC" ? BTC_CONFIRMATIONS : fresh.payment.asset === "ETH" ? ETH_CONFIRMATIONS : 0, message: ["BTC", "ETH"].includes(fresh.payment.asset) ? "Transaction recorded. Blockchain verification is running; a submitted hash alone is not proof of payment." : "Transaction hash submitted for manual review. This network is not yet automatically verified; payment is not confirmed until an administrator checks it." });
+    res.json({ status: fresh.status, paymentStatus: fresh.payment.status, confirmations: fresh.payment.confirmations, requiredConfirmations: fresh.payment.asset === "BTC" ? BTC_CONFIRMATIONS : fresh.payment.asset === "ETH" ? ETH_CONFIRMATIONS : 0, message: verificationMode(fresh.payment.asset) === "blockchain-check" ? "Transaction recorded. Blockchain verification is running; a submitted hash alone is not proof of payment." : "Transaction hash submitted for manual review. This network is not yet automatically verified; payment is not confirmed until an administrator checks it." });
   } catch (err) {
     if (err.code === "P2002") return res.status(409).json({ error: "That transaction hash has already been submitted for another order." });
     console.error(err); res.status(500).json({ error: "Could not submit transaction hash." });
