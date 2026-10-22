@@ -398,7 +398,6 @@ app.get("/api/products", customerAuth, async (req, res) => {
   });
 });
 app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 }), async (req, res) => {
-  if (!req.customer.membershipPaidAt) return res.status(403).json({ error: "Full catalogue ordering requires verified $20 Bitcoin membership." });
   try {
     const email = req.customer.email;
     const asset = String(req.body.asset || "").toUpperCase();
@@ -410,6 +409,11 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     const normalized = items.map(i => ({ sku: String(i.sku), quantity: Number(i.quantity) }));
     if (normalized.some(i => !Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 25)) return res.status(400).json({ error: "Invalid product quantity." });
     const totalUsdCents = normalized.reduce((sum, i) => sum + catalog.find(p => p.sku === i.sku).priceUsdCents * i.quantity, 0);
+    // Verified membership unlocks all orders. Without membership, allow direct product
+    // checkout only when the server-calculated order total is at least $20.
+    if (!req.customer.membershipPaidAt && totalUsdCents < 2000) {
+      return res.status(403).json({ error: "Direct checkout requires a product or order total of at least $20.00, or verified membership." });
+    }
     const config = assets[asset];
     if (!config.address) return res.status(503).json({ error: asset + " receiving wallet is not configured." });
     if (asset === "ETH" && !ETH_RPC_URL) return res.status(503).json({ error: "Ethereum verification is not configured yet. Please choose Bitcoin or contact support." });
