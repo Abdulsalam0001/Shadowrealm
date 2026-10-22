@@ -443,14 +443,14 @@ app.post("/api/orders/guest-smtp", rateLimit({ windowMs: 60_000, limit: 5, stand
     const expectedAmount = formatAtomic(expectedAtomic, config.decimals, config.displayDecimals);
     const orderNumber = "SHR-SMTP-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
     const accessToken = randomToken();
-    const intakeNote = ["PUBLIC SMTP ORDER — review before fulfillment.", "Domain: " + domain, "Use case: " + useCase, "Customer confirmed permission-based email only: yes.", "Capacity must ramp gradually after authentication and provider review; no instant full-capacity promise."].join("\n").slice(0, 1000);
+    const intakeNote = ["PUBLIC SMTP ORDER — review before fulfillment.", "Domain: " + domain, "Use case: " + useCase, "Customer confirmed permission-based email only: yes.", "SMTP activation timing may vary; fulfillment is subject to service review."].join("\n").slice(0, 1000);
     const order = await prisma.order.create({ data: {
       orderNumber, customerEmail: email, customerToken: accessToken, customerId: signedInCustomer?.id || null, totalNgn: 0, totalUsdCents: product.priceUsdCents,
       status: "AWAITING_PAYMENT", fulfillmentNote: intakeNote,
       items: { create: [{ productSku: product.sku, productName: product.name, quantity: 1, unitPriceNgn: 0, unitPriceUsdCents: product.priceUsdCents }] },
       payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
     }, include: { payment: true, items: true } });
-    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: asset === "BTC" ? "https://mempool.space" : "https://etherscan.io" }, accessToken, message: "Order created. The domain and use case must be reviewed, authenticated and ramped up gradually before sending." });
+    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: asset === "BTC" ? "https://mempool.space" : "https://etherscan.io" }, accessToken, message: "Order created. The domain and use case are reviewed before activation; fulfillment timing may vary." });
   } catch (err) { console.error("Guest SMTP order failed:", err.message); res.status(500).json({ error: "Could not create the SMTP order. Please try again later." }); }
 });
 
