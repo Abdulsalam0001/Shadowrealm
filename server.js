@@ -426,6 +426,8 @@ app.post("/api/orders/guest-smtp", rateLimit({ windowMs: 60_000, limit: 5, stand
   if (useCase.length < 20 || useCase.length > 1000) return res.status(400).json({ error: "Describe the legitimate email use case in 20–1,000 characters." });
   if (req.body?.permissionBased !== true) return res.status(400).json({ error: "Confirm that messages will go only to recipients who have opted in." });
   if (!["BTC", "ETH"].includes(asset)) return res.status(400).json({ error: "Choose BTC or ETH for payment." });
+  const signedInCustomer = await currentCustomer(req);
+  if (signedInCustomer && signedInCustomer.email !== email) return res.status(400).json({ error: "You are signed in. Use your account email so this order appears in your dashboard." });
   try {
     const product = await prisma.product.findFirst({ where: { sku, active: true } });
     if (!product) return res.status(404).json({ error: "That SMTP package is not currently available." });
@@ -443,7 +445,7 @@ app.post("/api/orders/guest-smtp", rateLimit({ windowMs: 60_000, limit: 5, stand
     const accessToken = randomToken();
     const intakeNote = ["PUBLIC SMTP ORDER — review before fulfillment.", "Domain: " + domain, "Use case: " + useCase, "Customer confirmed permission-based email only: yes.", "Capacity must ramp gradually after authentication and provider review; no instant full-capacity promise."].join("\n").slice(0, 1000);
     const order = await prisma.order.create({ data: {
-      orderNumber, customerEmail: email, customerToken: accessToken, totalNgn: 0, totalUsdCents: product.priceUsdCents,
+      orderNumber, customerEmail: email, customerToken: accessToken, customerId: signedInCustomer?.id || null, totalNgn: 0, totalUsdCents: product.priceUsdCents,
       status: "AWAITING_PAYMENT", fulfillmentNote: intakeNote,
       items: { create: [{ productSku: product.sku, productName: product.name, quantity: 1, unitPriceNgn: 0, unitPriceUsdCents: product.priceUsdCents }] },
       payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
