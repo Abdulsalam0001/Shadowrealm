@@ -550,7 +550,7 @@ app.post("/api/orders/:id/transaction", rateLimit({ windowMs: 60_000, limit: 10 
     await prisma.order.update({ where: { id: order.id }, data: { status: "PAYMENT_SUBMITTED" } });
     await checkPayment(updated.id);
     const fresh = await prisma.order.findUnique({ where: { id: order.id }, include: { payment: true } });
-    res.json({ status: fresh.status, paymentStatus: fresh.payment.status, confirmations: fresh.payment.confirmations, requiredConfirmations: fresh.payment.asset === "BTC" ? BTC_CONFIRMATIONS : fresh.payment.asset === "ETH" ? ETH_CONFIRMATIONS : 0, message: verificationMode(fresh.payment.asset) === "blockchain-check" ? "Transaction recorded. Blockchain verification is running; a submitted hash alone is not proof of payment." : "Transaction hash submitted for manual review. This network is not yet automatically verified; payment is not confirmed until an administrator checks it." });
+    res.json({ status: fresh.status, paymentStatus: fresh.payment.status, confirmations: fresh.payment.confirmations, requiredConfirmations: verificationMode(fresh.payment.asset) === "blockchain-check" ? (fresh.payment.asset === "BTC" ? BTC_CONFIRMATIONS : ETH_CONFIRMATIONS) : 0, message: verificationMode(fresh.payment.asset) === "blockchain-check" ? "Transaction recorded. Blockchain verification is running; a submitted hash alone is not proof of payment." : "Transaction hash submitted for manual review. This network is not yet automatically verified; payment is not confirmed until an administrator checks it." });
   } catch (err) {
     if (err.code === "P2002") return res.status(409).json({ error: "That transaction hash has already been submitted for another order." });
     console.error(err); res.status(500).json({ error: "Could not submit transaction hash." });
@@ -560,7 +560,7 @@ app.get("/api/orders/:id/status", async (req, res) => {
   const token = req.get("x-order-token") || String(req.query.token || "");
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { payment: true } });
   if (!order || !token || token.length !== order.customerToken.length || !crypto.timingSafeEqual(Buffer.from(order.customerToken), Buffer.from(token))) return res.status(404).json({ error: "Order not found." });
-  res.json({ order: publicOrder(order), payment: { asset: order.payment.asset, status: order.payment.status, confirmations: order.payment.confirmations, requiredConfirmations: order.payment.asset === "BTC" ? BTC_CONFIRMATIONS : order.payment.asset === "ETH" ? ETH_CONFIRMATIONS : 0, expectedAmount: order.payment.expectedAmount, txHash: order.payment.txHash } });
+  res.json({ order: publicOrder(order), payment: { asset: order.payment.asset, status: order.payment.status, confirmations: order.payment.confirmations, requiredConfirmations: verificationMode(order.payment.asset) === "blockchain-check" ? (order.payment.asset === "BTC" ? BTC_CONFIRMATIONS : ETH_CONFIRMATIONS) : 0, expectedAmount: order.payment.expectedAmount, txHash: order.payment.txHash } });
 });
 app.post("/api/admin/login", rateLimit({ windowMs: 15 * 60_000, limit: 8, standardHeaders: true, legacyHeaders: false }), (req, res) => {
   if (!ADMIN_USERNAME || !ADMIN_PASSWORD || ADMIN_SESSION_SECRET.length < 32) {
@@ -671,7 +671,7 @@ app.get("/api/admin/payment-wallets", admin, async (_req, res) => {
   res.json({ wallets: Object.entries(assetMeta).map(([asset, meta]) => {
     const fixed = Boolean(meta.fixedAddress);
     const wallet = saved.get(asset);
-    return { asset, label: meta.label, network: meta.network, address: fixed ? meta.fixedAddress : wallet?.address || "", enabled: fixed ? true : Boolean(wallet?.enabled && wallet.address?.trim()), fixed, verification: ["BTC", "ETH"].includes(asset) ? "blockchain-check" : "manual-review" };
+    return { asset, label: meta.label, network: meta.network, address: fixed ? meta.fixedAddress : wallet?.address || "", enabled: fixed ? true : Boolean(wallet?.enabled && wallet.address?.trim()), fixed, verification: verificationMode(asset) };
   }) });
 });
 app.put("/api/admin/payment-wallets/:asset", admin, async (req, res) => {
