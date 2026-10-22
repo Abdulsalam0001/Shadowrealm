@@ -10,6 +10,9 @@ const prisma = new PrismaClient();
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 app.disable("x-powered-by");
+// Render terminates TLS and forwards requests through one trusted proxy hop.
+// This keeps express-rate-limit IP detection working behind Render.
+app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "32kb" }));
 app.use("/api", rateLimit({ windowMs: 60_000, limit: 100, standardHeaders: true, legacyHeaders: false }));
