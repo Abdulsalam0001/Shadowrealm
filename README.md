@@ -4,11 +4,11 @@ Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy
 
 ## Current scope
 
-- Products and server-side price calculation for eight demo SKUs, returned only to authenticated customers.
+- Products and server-side USD price calculation for the active catalogue, returned only to authenticated customers.
 - Order creation with a private order access token.
-- Direct **Bitcoin mainnet** and **Ethereum mainnet native ETH** payments to the configured receiving addresses.
-- Customer submits a transaction hash; the server verifies live chain data instead of trusting the submitted hash.
-- BTC checks use mempool.space transaction outputs and confirmation status. ETH checks use Ethereum JSON-RPC transaction + receipt and explicitly require chain ID 1.
+- Payment choices include BTC, ETH, USDT (ERC-20 and TRC-20), USDC (ERC-20 and Solana), SOL, LTC, XRP, DOGE, BNB (BEP-20), and TRX. Alternate networks appear only after an admin saves and enables a receiving address.
+- Customer submits a transaction hash. BTC and ETH can be automatically verified when their verification configuration is available; alternate networks are explicitly held for manual admin review and are never auto-confirmed from a submitted hash.
+- BTC checks use mempool.space transaction outputs and confirmation status. ETH checks use Ethereum JSON-RPC transaction + receipt and explicitly require chain ID 1 when `ETH_RPC_URL` is configured.
 - Required confirmations default to 2 BTC and 12 ETH. Adjust only after evaluating your risk tolerance.
 - Duplicate transaction hashes are rejected by a database unique constraint.
 - Admin order queue and paid-order fulfilment/review endpoints protected by a signed, expiring HTTP-only session cookie.
@@ -18,11 +18,11 @@ Responsive storefront + Node.js/Express API + Neon PostgreSQL. Render can deploy
 
 1. Create a Neon PostgreSQL database and copy its TLS-enabled connection string into Render's `DATABASE_URL`.
 2. Set `CUSTOMER_SESSION_SECRET` to a cryptographically random secret of at least 32 characters for customer sessions. Set `ADMIN_USERNAME` to your chosen admin username, `ADMIN_PASSWORD` to a long unique password, and `ADMIN_SESSION_SECRET` to a cryptographically random secret of at least 32 characters. Keep all three only in Render environment variables.
-3. Set `BTC_NGN_RATE` and `ETH_NGN_RATE` to trusted NGN-per-coin rates. The rates are configuration values, not live market data. Update them regularly or integrate a trusted pricing feed before production.
-4. Set `ETH_RPC_URL` to a reliable Ethereum mainnet RPC endpoint. Do not use a testnet.
+3. Optionally set `BTC_USD_RATE` and `ETH_USD_RATE` as numeric USD-per-coin rates. Otherwise the server requests a live Coinbase quote and falls back to CoinGecko. Stablecoin and altcoin rates use those live quote sources too.
+4. Set `ETH_RPC_URL` to a reliable Ethereum mainnet RPC endpoint for automatic ETH verification. If it is absent, ETH invoices remain available but require manual review. Set `BTC_RECEIVING_ADDRESS` and `ETH_RECEIVING_ADDRESS` in Render to change the fixed BTC/ETH wallets; these are intentionally read-only in `/admin`.
 5. Deploy with the included Render blueprint. The build command applies Prisma migrations.
-6. Visit `/api/health` and confirm `crypto.BTC` and `crypto.ETH` are true before testing checkout.
-7. Keep secrets only in Render environment variables; never add `.env` to Git.
+6. Visit `/api/health` and confirm `databaseConfigured` is true. `crypto.ETH` is true when `ETH_RPC_URL` enables automatic verification; otherwise ETH payments are held for manual review.
+7. In `/admin` → **Crypto payment wallets**, paste a receiving address for each desired non-BTC/ETH network and enable it. Wallet addresses are stored in Neon; do not enable a network until you have confirmed the address and network. Keep secrets only in Render environment variables; never add `.env` to Git.
 
 ## First database migration
 
@@ -34,18 +34,23 @@ The initial migration is included in `prisma/migrations`. Render runs `prisma mi
 - `POST /api/auth/register` — create an account with email and a password of at least 12 characters.
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session` — customer authentication.
 - `GET /api/products` — requires an authenticated customer session.
-- `POST /api/orders` — JSON: `{ "email": "buyer@example.com", "asset": "BTC", "items": [{ "sku": "toolkit", "quantity": 1 }] }`
+- `GET /api/payment-methods` — returns payment methods that have a fixed or enabled receiving wallet.
+- `POST /api/orders` — authenticated JSON: `{ "asset": "BTC", "items": [{ "sku": "rdppro", "quantity": 1 }] }`.
+- `POST /api/orders/smtp` — authenticated SMTP order intake; guest checkout is disabled.
 - `POST /api/orders/:id/transaction` — header `x-order-token`, JSON `{ "txHash": "..." }`
 - `GET /api/orders/:id/status` — header `x-order-token`
-- `GET /api/admin/products` — an authenticated admin session\n- `PATCH /api/admin/products/:sku` — an authenticated admin session; accepts `priceNgn`, `active`, `name`, `description`, and `fulfillmentMode` (`AUTO` or `MANUAL`)\n- `GET /api/admin/orders` — an authenticated admin session
-- `PATCH /api/admin/orders/:id/fulfill` — an authenticated admin session; only chain-verified paid orders may be fulfilled.
+- `GET /api/admin/products` — an authenticated admin session.
+- `PATCH /api/admin/products/:sku` — an authenticated admin session; accepts `priceUsd`, `active`, `name`, `description`, and `fulfillmentMode` (`AUTO` or `MANUAL`).
+- `GET /api/admin/payment-wallets` and `PUT /api/admin/payment-wallets/:asset` — manage non-BTC/ETH receiving wallets.
+- `GET /api/admin/orders` — an authenticated admin session.
+- `PATCH /api/admin/orders/:id/fulfill` — an authenticated admin session; only paid orders may be fulfilled after automatic blockchain verification or explicit admin review.
 - `PATCH /api/admin/orders/:id/review` — an authenticated admin session
 
 ## Shared receiving addresses and payment matching
 
 Because each asset uses one shared address, the buyer must submit the transaction hash. The backend independently verifies that the transaction exists, pays the exact configured address, has enough value, and has the required confirmations. Each quote has a small unique amount increment so customers can be instructed to send the exact quoted amount. This is not a substitute for displaying the quote carefully; do not reuse quotes or manually mark unverified orders as paid.
 
-A transaction sent to the wrong chain/address, a failed ETH receipt, or an underpayment is moved to payment review. An unconfirmed transaction stays pending/confirming. If the explorer/RPC is unavailable, the backend leaves the current status unchanged; it does not manufacture confirmation.
+A transaction sent to the wrong chain/address, a failed ETH receipt, or an underpayment is moved to payment review. An unconfirmed transaction stays pending/confirming. If the explorer/RPC is unavailable, the backend leaves the current status unchanged; it does not manufacture confirmation. Alternate networks remain submitted until an admin checks the transaction on the correct explorer and uses the manual confirmation action.
 
 ## Fulfilment
 
@@ -58,4 +63,4 @@ All seeded products are `MANUAL`. Admin must review supplier fulfilment and mark
 - Add customer privacy/terms/refund pages and support contact before launch.
 - Set real supplier prices and fulfilment policies; the current prices are demo seed values.
 - Configure backups and monitoring for Neon/Render.
-- Test on small amounts first. This version verifies native BTC and native ETH only; ERC-20 tokens and other networks are not supported.
+- Test on small amounts first. BTC and native ETH have automatic verifiers; the configured token and altcoin options use manual review until chain-specific automated verifiers are added. The receiving address must match the selected network exactly.
