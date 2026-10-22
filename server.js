@@ -27,7 +27,36 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || "";
 const FULFILLMENT_WEBHOOK_URL = process.env.FULFILLMENT_WEBHOOK_URL || "";
 const FULFILLMENT_WEBHOOK_SECRET = process.env.FULFILLMENT_WEBHOOK_SECRET || "";
-const assets = { BTC: { decimals: 8, displayDecimals: 8, rate: BTC_USD_RATE, address: BTC_ADDRESS }, ETH: { decimals: 18, displayDecimals: 8, rate: ETH_USD_RATE, address: ETH_ADDRESS } };
+const assetMeta = {
+  BTC: { label: "Bitcoin (BTC)", network: "Bitcoin", symbol: "BTC", decimals: 8, displayDecimals: 8, explorer: "https://mempool.space", fixedAddress: BTC_ADDRESS },
+  ETH: { label: "Ethereum (ETH)", network: "Ethereum Mainnet", symbol: "ETH", decimals: 18, displayDecimals: 8, explorer: "https://etherscan.io", fixedAddress: ETH_ADDRESS },
+  USDT_ERC20: { label: "Tether (USDT)", network: "Ethereum (ERC-20)", symbol: "USDT", decimals: 6, displayDecimals: 4, explorer: "https://etherscan.io" },
+  USDT_TRC20: { label: "Tether (USDT)", network: "Tron (TRC-20)", symbol: "USDT", decimals: 6, displayDecimals: 4, explorer: "https://tronscan.org" },
+  USDC_ERC20: { label: "USD Coin (USDC)", network: "Ethereum (ERC-20)", symbol: "USDC", decimals: 6, displayDecimals: 4, explorer: "https://etherscan.io" },
+  USDC_SOL: { label: "USD Coin (USDC)", network: "Solana", symbol: "USDC", decimals: 6, displayDecimals: 4, explorer: "https://solscan.io" },
+  SOL: { label: "Solana (SOL)", network: "Solana", symbol: "SOL", decimals: 9, displayDecimals: 6, explorer: "https://solscan.io" },
+  LTC: { label: "Litecoin (LTC)", network: "Litecoin", symbol: "LTC", decimals: 8, displayDecimals: 6, explorer: "https://blockchair.com/litecoin" },
+  XRP: { label: "XRP (XRP)", network: "XRP Ledger", symbol: "XRP", decimals: 6, displayDecimals: 4, explorer: "https://xrpscan.com" },
+  DOGE: { label: "Dogecoin (DOGE)", network: "Dogecoin", symbol: "DOGE", decimals: 8, displayDecimals: 6, explorer: "https://blockchair.com/dogecoin" },
+  BNB_BEP20: { label: "BNB (BEP-20)", network: "BNB Smart Chain (BEP-20)", symbol: "BNB", decimals: 18, displayDecimals: 8, explorer: "https://bscscan.com" },
+  TRX: { label: "TRON (TRX)", network: "Tron", symbol: "TRX", decimals: 6, displayDecimals: 4, explorer: "https://tronscan.org" }
+};
+const assets = Object.fromEntries(Object.entries(assetMeta).map(([asset, meta]) => [asset, { ...meta, address: meta.fixedAddress || "" }]));
+async function getAssetConfig(asset) {
+  const meta = assetMeta[asset];
+  if (!meta) return null;
+  if (meta.fixedAddress) return { ...meta, address: meta.fixedAddress, rate: asset === "BTC" ? BTC_USD_RATE : ETH_USD_RATE };
+  const wallet = await prisma.paymentWallet.findUnique({ where: { asset } });
+  return wallet?.enabled && wallet.address?.trim() ? { ...meta, address: wallet.address.trim(), rate: "" } : null;
+}
+async function listPaymentMethods() {
+  const wallets = await prisma.paymentWallet.findMany({ where: { enabled: true } });
+  const configured = new Set(wallets.filter(w => w.address.trim()).map(w => w.asset));
+  return Object.entries(assetMeta).filter(([asset, meta]) => meta.fixedAddress || configured.has(asset)).map(([asset, meta]) => ({
+    asset, label: meta.label, network: meta.network, symbol: meta.symbol, addressConfigured: true,
+    verification: ["BTC", "ETH"].includes(asset) ? "blockchain-check" : "manual-review"
+  }));
+}
 
 const seedProducts = [
   { sku: "toolkit", name: "Developer Toolkit", description: "A curated bundle of practical developer utilities for building, debugging, testing, and maintaining software projects.", priceNgn: 0, priceUsdCents: 850, fulfillmentMode: "MANUAL" },
@@ -143,13 +172,15 @@ function amountToAtomic(amountCents, rate, decimals) {
   return (BigInt(amountCents) * scale * scale) / (rateScaled * 100n);
 }
 async function getCryptoUsdRate(asset) {
-  const envRate = asset === "BTC" ? BTC_USD_RATE : ETH_USD_RATE;
+  const meta = assetMeta[asset];
+  if (!meta) throw new Error("Unsupported payment asset.");
+  const envRate = asset === "BTC" ? BTC_USD_RATE : asset === "ETH" ? ETH_USD_RATE : "";
   if (envRate && /^\d+(\.\d+)?$/.test(envRate) && Number(envRate) > 0) return envRate;
-  const response = await fetch("https://api.coinbase.com/v2/prices/" + asset + "-USD/spot", { signal: AbortSignal.timeout(8000) });
-  if (!response.ok) throw new Error("Live " + asset + "/USD quote unavailable.");
+  const response = await fetch("https://api.coinbase.com/v2/prices/" + meta.symbol + "-USD/spot", { signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new Error("Live " + meta.symbol + "/USD quote unavailable.");
   const quote = await response.json();
   const rate = String(quote?.data?.amount || "");
-  if (!/^\d+(\.\d+)?$/.test(rate) || Number(rate) <= 0) throw new Error("Invalid " + asset + "/USD quote.");
+  if (!/^\d+(\.\d+)?$/.test(rate) || Number(rate) <= 0) throw new Error("Invalid " + meta.symbol + "/USD quote.");
   return rate;
 }
 function formatAtomic(atomic, decimals, displayDecimals = decimals) {
@@ -178,7 +209,7 @@ async function verifyTransaction(payment) {
     if (response.status === 404) return { found: false, confirmations: 0 };
     if (!response.ok) throw new Error("Bitcoin explorer unavailable.");
     const tx = await response.json();
-    const paid = tx.vout.filter(o => o.scriptpubkey_address === BTC_ADDRESS).reduce((sum, o) => sum + BigInt(o.value), 0n);
+    const paid = tx.vout.filter(o => o.scriptpubkey_address === payment.address).reduce((sum, o) => sum + BigInt(o.value), 0n);
     const status = tx.status || {};
     let confirmations = 0;
     if (status.confirmed && status.block_height) {
@@ -186,7 +217,7 @@ async function verifyTransaction(payment) {
       if (!tipResponse.ok) throw new Error("Bitcoin block height unavailable.");
       confirmations = Math.max(0, Number((await tipResponse.text()).trim()) - Number(status.block_height) + 1);
     }
-    return { found: true, correctDestination: tx.vout.some(o => o.scriptpubkey_address === BTC_ADDRESS), paidAtomic: paid.toString(), confirmations, successful: true };
+    return { found: true, correctDestination: tx.vout.some(o => o.scriptpubkey_address === payment.address), paidAtomic: paid.toString(), confirmations, successful: true };
   }
   const chainId = await rpc("eth_chainId", []);
   if (BigInt(chainId) !== 1n) throw new Error("ETH_RPC_URL is not connected to Ethereum mainnet.");
@@ -199,11 +230,16 @@ async function verifyTransaction(payment) {
   const blockNumber = receipt.blockNumber ? BigInt(receipt.blockNumber) : 0n;
   const tip = BigInt(tipHex);
   const confirmations = blockNumber > 0n && tip >= blockNumber ? Number(tip - blockNumber + 1n) : 0;
-  return { found: true, correctDestination: String(tx.to || "").toLowerCase() === ETH_ADDRESS, paidAtomic: BigInt(tx.value || "0x0").toString(), confirmations, successful: receipt.status === "0x1" };
+  return { found: true, correctDestination: String(tx.to || "").toLowerCase() === payment.address.toLowerCase(), paidAtomic: BigInt(tx.value || "0x0").toString(), confirmations, successful: receipt.status === "0x1" };
 }
 async function checkPayment(paymentId) {
   const payment = await prisma.cryptoPayment.findUnique({ where: { id: paymentId }, include: { order: { include: { items: true } } } });
   if (!payment || !payment.txHash || ["PAID", "FULFILLED", "REVIEW"].includes(payment.status)) return;
+  if (!["BTC", "ETH"].includes(payment.asset)) {
+    await prisma.cryptoPayment.update({ where: { id: payment.id }, data: { status: "SUBMITTED", lastCheckedAt: new Date() } });
+    await prisma.order.update({ where: { id: payment.orderId }, data: { status: "PAYMENT_SUBMITTED" } });
+    return;
+  }
   try {
     const result = await verifyTransaction(payment);
     const now = new Date();
@@ -375,6 +411,10 @@ app.post("/api/membership/invoice", customerAuth, rateLimit({ windowMs: 60_000, 
   }
 });
 
+app.get("/api/payment-methods", async (_req, res) => {
+  try { res.json({ methods: await listPaymentMethods() }); }
+  catch (err) { console.error("Payment methods lookup failed:", err.message); res.status(500).json({ error: "Payment methods are temporarily unavailable." }); }
+});
 app.get("/api/products", customerAuth, async (req, res) => {
   // Authenticated customers can see the complete live price list. Membership gates
   // ordering, not catalogue visibility; the order endpoint independently enforces it.
@@ -402,7 +442,7 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     const email = req.customer.email;
     const asset = String(req.body.asset || "").toUpperCase();
     const items = req.body.items;
-    if (!["BTC", "ETH"].includes(asset)) return res.status(400).json({ error: "Choose BTC or ETH." });
+    if (!assetMeta[asset]) return res.status(400).json({ error: "Choose a supported payment asset." });
     if (!Array.isArray(items) || items.length < 1 || items.length > 20) return res.status(400).json({ error: "Cart is empty or invalid." });
     const catalog = await prisma.product.findMany({ where: { active: true, sku: { in: [...new Set(items.map(i => String(i.sku)))] } } });
     if (catalog.length !== new Set(items.map(i => String(i.sku))).size) return res.status(400).json({ error: "A product is unavailable." });
@@ -432,47 +472,43 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
       items: { create: normalized.map(i => { const p = catalog.find(x => x.sku === i.sku); return { productSku: p.sku, productName: p.name, quantity: i.quantity, unitPriceNgn: 0, unitPriceUsdCents: p.priceUsdCents }; }) },
       payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
     }, include: { payment: true } });
-    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: asset === "BTC" ? "https://mempool.space" : "https://etherscan.io" }, accessToken });
+    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: config.explorer, verification: ["BTC", "ETH"].includes(asset) ? "blockchain-check" : "manual-review" }, accessToken });
   } catch (err) { console.error(err); res.status(500).json({ error: "Could not create order." }); }
 });
-app.post("/api/orders/guest-smtp", rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
+app.post("/api/orders/smtp", customerAuth, rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
   const domain = String(req.body?.domain || "").trim().toLowerCase();
   const useCase = String(req.body?.useCase || "").trim();
   const sku = String(req.body?.sku || "").trim().toLowerCase();
   const asset = String(req.body?.asset || "").trim().toUpperCase();
-  if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid email address for the order receipt." });
   if (!/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(domain)) return res.status(400).json({ error: "Enter the domain you control for SMTP setup." });
   if (!["smtp", "smtpgrowth"].includes(sku)) return res.status(400).json({ error: "Choose an available SMTP setup package." });
   if (useCase.length < 20 || useCase.length > 1000) return res.status(400).json({ error: "Describe the legitimate email use case in 20–1,000 characters." });
-  if (req.body?.permissionBased !== true) return res.status(400).json({ error: "Confirm that messages will go only to recipients who have opted in." });
-  if (!["BTC", "ETH"].includes(asset)) return res.status(400).json({ error: "Choose BTC or ETH for payment." });
-  const signedInCustomer = await currentCustomer(req);
-  if (signedInCustomer && signedInCustomer.email !== email) return res.status(400).json({ error: "You are signed in. Use your account email so this order appears in your dashboard." });
+  if (req.body?.permissionBased !== true) return res.status(400).json({ error: "Confirm that messages will be sent only to recipients who opted in." });
+  if (!assetMeta[asset]) return res.status(400).json({ error: "Choose a supported payment asset." });
   try {
     const product = await prisma.product.findFirst({ where: { sku, active: true } });
     if (!product) return res.status(404).json({ error: "That SMTP package is not currently available." });
-    const config = assets[asset];
-    if (!config.address) return res.status(503).json({ error: asset + " receiving wallet is not configured." });
-    if (asset === "ETH" && !ETH_RPC_URL) return res.status(503).json({ error: "Ethereum payment verification is not configured. Choose Bitcoin or contact support." });
+    if (!req.customer.membershipPaidAt && product.priceUsdCents <= 2000) return res.status(403).json({ error: "This SMTP package is under the $20 direct-checkout threshold. Verify membership or choose a package priced above $20." });
+    const config = await getAssetConfig(asset);
+    if (!config?.address) return res.status(503).json({ error: asset + " receiving wallet is not configured. Choose another payment method." });
     let baseAtomic;
     try { baseAtomic = amountToAtomic(product.priceUsdCents, await getCryptoUsdRate(asset), config.decimals); }
-    catch { return res.status(503).json({ error: "A live " + asset + "/USD quote is unavailable. Please retry shortly." }); }
+    catch { return res.status(503).json({ error: "A live " + config.symbol + "/USD quote is unavailable. Please retry shortly." }); }
     const displayUnit = 10n ** BigInt(config.decimals - config.displayDecimals);
     const roundedBaseAtomic = (baseAtomic / displayUnit) * displayUnit;
     const expectedAtomic = (roundedBaseAtomic + BigInt(crypto.randomInt(1, 1000)) * displayUnit).toString();
     const expectedAmount = formatAtomic(expectedAtomic, config.decimals, config.displayDecimals);
     const orderNumber = "SHR-SMTP-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
     const accessToken = randomToken();
-    const intakeNote = ["PUBLIC SMTP ORDER — review before fulfillment.", "Domain: " + domain, "Use case: " + useCase, "Customer confirmed permission-based email only: yes.", "SMTP activation timing may vary; fulfillment is subject to service review."].join("\n").slice(0, 1000);
+    const intakeNote = ["SMTP ORDER — domain and use case require review before fulfilment.", "Domain: " + domain, "Use case: " + useCase, "Customer confirmed permission-based email only: yes.", "Activation timing may vary; fulfilment is subject to service review."].join("\n").slice(0, 1000);
     const order = await prisma.order.create({ data: {
-      orderNumber, customerEmail: email, customerToken: accessToken, customerId: signedInCustomer?.id || null, totalNgn: 0, totalUsdCents: product.priceUsdCents,
+      orderNumber, customerEmail: req.customer.email, customerToken: accessToken, customerId: req.customer.id, totalNgn: 0, totalUsdCents: product.priceUsdCents,
       status: "AWAITING_PAYMENT", fulfillmentNote: intakeNote,
       items: { create: [{ productSku: product.sku, productName: product.name, quantity: 1, unitPriceNgn: 0, unitPriceUsdCents: product.priceUsdCents }] },
       payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
     }, include: { payment: true, items: true } });
-    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: asset === "BTC" ? "https://mempool.space" : "https://etherscan.io" }, accessToken, message: "Order created. The domain and use case are reviewed before activation; fulfillment timing may vary." });
-  } catch (err) { console.error("Guest SMTP order failed:", err.message); res.status(500).json({ error: "Could not create the SMTP order. Please try again later." }); }
+    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: config.explorer, verification: ["BTC", "ETH"].includes(asset) ? "blockchain-check" : "manual-review" }, accessToken, message: "Order created. The domain and use case are reviewed before activation; fulfilment timing may vary." });
+  } catch (err) { console.error("Authenticated SMTP order failed:", err.message); res.status(500).json({ error: "Could not create the SMTP order. Please try again later." }); }
 });
 
 app.get("/api/account/orders", customerAuth, async (req, res) => {
@@ -494,14 +530,14 @@ app.post("/api/orders/:id/transaction", rateLimit({ windowMs: 60_000, limit: 10 
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { payment: true } });
   if (!order || !token || !crypto.timingSafeEqual(Buffer.from(order.customerToken), Buffer.from(token.padEnd(order.customerToken.length).slice(0, order.customerToken.length))) || token.length !== order.customerToken.length) return res.status(404).json({ error: "Order not found." });
   if (order.payment.status === "PAID" || order.status === "FULFILLED") return res.json({ status: order.status, message: "Payment already verified." });
-  const valid = order.payment.asset === "BTC" ? /^[0-9a-fA-F]{64}$/.test(txHash) : /^0x[0-9a-fA-F]{64}$/.test(txHash);
+  const valid = order.payment.asset === "SOL" || order.payment.asset === "USDC_SOL" ? /^[1-9A-HJ-NP-Za-km-z]{80,100}$/.test(txHash) : /^[0-9a-fA-F]{64}$/.test(txHash);
   if (!valid) return res.status(400).json({ error: "Enter a valid transaction hash for the selected network." });
   try {
     const updated = await prisma.cryptoPayment.update({ where: { id: order.payment.id }, data: { txHash, status: "SUBMITTED", confirmations: 0, lastCheckedAt: null } });
     await prisma.order.update({ where: { id: order.id }, data: { status: "PAYMENT_SUBMITTED" } });
     await checkPayment(updated.id);
     const fresh = await prisma.order.findUnique({ where: { id: order.id }, include: { payment: true } });
-    res.json({ status: fresh.status, paymentStatus: fresh.payment.status, confirmations: fresh.payment.confirmations, requiredConfirmations: fresh.payment.asset === "BTC" ? BTC_CONFIRMATIONS : ETH_CONFIRMATIONS, message: "Transaction recorded. Verification uses live blockchain data; this page does not treat a submitted hash as proof of payment." });
+    res.json({ status: fresh.status, paymentStatus: fresh.payment.status, confirmations: fresh.payment.confirmations, requiredConfirmations: fresh.payment.asset === "BTC" ? BTC_CONFIRMATIONS : fresh.payment.asset === "ETH" ? ETH_CONFIRMATIONS : 0, message: ["BTC", "ETH"].includes(fresh.payment.asset) ? "Transaction recorded. Blockchain verification is running; a submitted hash alone is not proof of payment." : "Transaction hash submitted for manual review. This network is not yet automatically verified; payment is not confirmed until an administrator checks it." });
   } catch (err) {
     if (err.code === "P2002") return res.status(409).json({ error: "That transaction hash has already been submitted for another order." });
     console.error(err); res.status(500).json({ error: "Could not submit transaction hash." });
@@ -511,7 +547,7 @@ app.get("/api/orders/:id/status", async (req, res) => {
   const token = req.get("x-order-token") || String(req.query.token || "");
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { payment: true } });
   if (!order || !token || token.length !== order.customerToken.length || !crypto.timingSafeEqual(Buffer.from(order.customerToken), Buffer.from(token))) return res.status(404).json({ error: "Order not found." });
-  res.json({ order: publicOrder(order), payment: { asset: order.payment.asset, status: order.payment.status, confirmations: order.payment.confirmations, requiredConfirmations: order.payment.asset === "BTC" ? BTC_CONFIRMATIONS : ETH_CONFIRMATIONS, expectedAmount: order.payment.expectedAmount, txHash: order.payment.txHash } });
+  res.json({ order: publicOrder(order), payment: { asset: order.payment.asset, status: order.payment.status, confirmations: order.payment.confirmations, requiredConfirmations: order.payment.asset === "BTC" ? BTC_CONFIRMATIONS : order.payment.asset === "ETH" ? ETH_CONFIRMATIONS : 0, expectedAmount: order.payment.expectedAmount, txHash: order.payment.txHash } });
 });
 app.post("/api/admin/login", rateLimit({ windowMs: 15 * 60_000, limit: 8, standardHeaders: true, legacyHeaders: false }), (req, res) => {
   if (!ADMIN_USERNAME || !ADMIN_PASSWORD || ADMIN_SESSION_SECRET.length < 32) {
@@ -615,6 +651,45 @@ app.patch("/api/admin/customers/:id/verification", admin, async (req, res) => {
 app.get("/api/admin/orders", admin, async (_req, res) => {
   const orders = await prisma.order.findMany({ include: { items: true, payment: true }, orderBy: { createdAt: "desc" }, take: 100 });
   res.json({ orders: orders.map(({ customerToken, ...order }) => order) });
+});
+app.get("/api/admin/payment-wallets", admin, async (_req, res) => {
+  const wallets = await prisma.paymentWallet.findMany({ orderBy: { asset: "asc" } });
+  const saved = new Map(wallets.map(w => [w.asset, w]));
+  res.json({ wallets: Object.entries(assetMeta).map(([asset, meta]) => {
+    const fixed = Boolean(meta.fixedAddress);
+    const wallet = saved.get(asset);
+    return { asset, label: meta.label, network: meta.network, address: fixed ? meta.fixedAddress : wallet?.address || "", enabled: fixed ? true : Boolean(wallet?.enabled && wallet.address?.trim()), fixed, verification: ["BTC", "ETH"].includes(asset) ? "blockchain-check" : "manual-review" };
+  }) });
+});
+app.put("/api/admin/payment-wallets/:asset", admin, async (req, res) => {
+  const asset = String(req.params.asset || "").toUpperCase();
+  const meta = assetMeta[asset];
+  if (!meta) return res.status(404).json({ error: "Unsupported payment asset." });
+  if (meta.fixedAddress) return res.status(403).json({ error: "BTC and ETH receiving addresses are locked to the server environment and cannot be edited here." });
+  const address = String(req.body.address || "").trim();
+  const enabled = req.body.enabled === true;
+  if (address.length > 256 || (enabled && address.length < 8)) return res.status(400).json({ error: "Enter a valid receiving address before enabling this network." });
+  try {
+    const wallet = await prisma.paymentWallet.upsert({
+      where: { asset },
+      create: { asset, address, enabled: enabled && Boolean(address), updatedAt: new Date() },
+      update: { address, enabled: enabled && Boolean(address), updatedAt: new Date() }
+    });
+    res.json({ wallet: { asset: wallet.asset, address: wallet.address, enabled: wallet.enabled, updatedAt: wallet.updatedAt } });
+  } catch (err) { console.error("Payment wallet update failed:", err.message); res.status(500).json({ error: "Could not save payment wallet." }); }
+});
+app.post("/api/admin/orders/:id/confirm-payment", admin, async (req, res) => {
+  const note = String(req.body.note || "").trim().slice(0, 500);
+  if (note.length < 4) return res.status(400).json({ error: "Add a review note confirming how the payment was checked." });
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { payment: true, items: true } });
+  if (!order) return res.status(404).json({ error: "Order not found." });
+  if (!order.payment || !order.payment.txHash) return res.status(409).json({ error: "A transaction hash must be submitted before manual confirmation." });
+  if (["PAID", "FULFILLED"].includes(order.status)) return res.json({ order: publicOrder(order), message: "Payment was already confirmed." });
+  const payment = await prisma.cryptoPayment.update({ where: { id: order.payment.id }, data: { status: "PAID", lastCheckedAt: new Date() } });
+  const updated = await prisma.order.update({ where: { id: order.id }, data: { status: "PAID", fulfillmentNote: ((order.fulfillmentNote || "") + "\\nManual payment confirmation by " + ADMIN_USERNAME + ": " + note).slice(0, 2000) } });
+  if (updated.type === "MEMBERSHIP" && updated.customerId) await prisma.customer.update({ where: { id: updated.customerId }, data: { membershipPaidAt: new Date(), membershipVerifiedBy: ADMIN_USERNAME, membershipAdminNote: note } });
+  else if (updated.type === "PRODUCT") await tryAutoFulfillment(updated.id);
+  res.json({ order: publicOrder(updated), paymentStatus: payment.status, message: "Payment manually confirmed and recorded." });
 });
 app.patch("/api/admin/orders/:id/fulfill", admin, async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { payment: true } });
