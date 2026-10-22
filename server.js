@@ -30,16 +30,16 @@ const FULFILLMENT_WEBHOOK_SECRET = process.env.FULFILLMENT_WEBHOOK_SECRET || "";
 const assetMeta = {
   BTC: { label: "Bitcoin (BTC)", network: "Bitcoin", symbol: "BTC", decimals: 8, displayDecimals: 8, explorer: "https://mempool.space", fixedAddress: BTC_ADDRESS },
   ETH: { label: "Ethereum (ETH)", network: "Ethereum Mainnet", symbol: "ETH", decimals: 18, displayDecimals: 8, explorer: "https://etherscan.io", fixedAddress: ETH_ADDRESS },
-  USDT_ERC20: { label: "Tether (USDT)", network: "Ethereum (ERC-20)", symbol: "USDT", decimals: 6, displayDecimals: 4, explorer: "https://etherscan.io" },
-  USDT_TRC20: { label: "Tether (USDT)", network: "Tron (TRC-20)", symbol: "USDT", decimals: 6, displayDecimals: 4, explorer: "https://tronscan.org" },
-  USDC_ERC20: { label: "USD Coin (USDC)", network: "Ethereum (ERC-20)", symbol: "USDC", decimals: 6, displayDecimals: 4, explorer: "https://etherscan.io" },
-  USDC_SOL: { label: "USD Coin (USDC)", network: "Solana", symbol: "USDC", decimals: 6, displayDecimals: 4, explorer: "https://solscan.io" },
+  USDT_ERC20: { label: "Tether (USDT)", network: "Ethereum (ERC-20)", symbol: "USDT", decimals: 6, displayDecimals: 6, explorer: "https://etherscan.io" },
+  USDT_TRC20: { label: "Tether (USDT)", network: "Tron (TRC-20)", symbol: "USDT", decimals: 6, displayDecimals: 6, explorer: "https://tronscan.org" },
+  USDC_ERC20: { label: "USD Coin (USDC)", network: "Ethereum (ERC-20)", symbol: "USDC", decimals: 6, displayDecimals: 6, explorer: "https://etherscan.io" },
+  USDC_SOL: { label: "USD Coin (USDC)", network: "Solana", symbol: "USDC", decimals: 6, displayDecimals: 6, explorer: "https://solscan.io" },
   SOL: { label: "Solana (SOL)", network: "Solana", symbol: "SOL", decimals: 9, displayDecimals: 6, explorer: "https://solscan.io" },
   LTC: { label: "Litecoin (LTC)", network: "Litecoin", symbol: "LTC", decimals: 8, displayDecimals: 6, explorer: "https://blockchair.com/litecoin" },
-  XRP: { label: "XRP (XRP)", network: "XRP Ledger", symbol: "XRP", decimals: 6, displayDecimals: 4, explorer: "https://xrpscan.com" },
+  XRP: { label: "XRP (XRP)", network: "XRP Ledger", symbol: "XRP", decimals: 6, displayDecimals: 6, explorer: "https://xrpscan.com" },
   DOGE: { label: "Dogecoin (DOGE)", network: "Dogecoin", symbol: "DOGE", decimals: 8, displayDecimals: 6, explorer: "https://blockchair.com/dogecoin" },
   BNB_BEP20: { label: "BNB (BEP-20)", network: "BNB Smart Chain (BEP-20)", symbol: "BNB", decimals: 18, displayDecimals: 8, explorer: "https://bscscan.com" },
-  TRX: { label: "TRON (TRX)", network: "Tron", symbol: "TRX", decimals: 6, displayDecimals: 4, explorer: "https://tronscan.org" }
+  TRX: { label: "TRON (TRX)", network: "Tron", symbol: "TRX", decimals: 6, displayDecimals: 6, explorer: "https://tronscan.org" }
 };
 const assets = Object.fromEntries(Object.entries(assetMeta).map(([asset, meta]) => [asset, { ...meta, address: meta.fixedAddress || "" }]));
 async function getAssetConfig(asset) {
@@ -176,10 +176,21 @@ async function getCryptoUsdRate(asset) {
   if (!meta) throw new Error("Unsupported payment asset.");
   const envRate = asset === "BTC" ? BTC_USD_RATE : asset === "ETH" ? ETH_USD_RATE : "";
   if (envRate && /^\d+(\.\d+)?$/.test(envRate) && Number(envRate) > 0) return envRate;
-  const response = await fetch("https://api.coinbase.com/v2/prices/" + meta.symbol + "-USD/spot", { signal: AbortSignal.timeout(8000) });
+  try {
+    const response = await fetch("https://api.coinbase.com/v2/prices/" + meta.symbol + "-USD/spot", { signal: AbortSignal.timeout(6000) });
+    if (response.ok) {
+      const quote = await response.json();
+      const rate = String(quote?.data?.amount || "");
+      if (/^\d+(\.\d+)?$/.test(rate) && Number(rate) > 0) return rate;
+    }
+  } catch {}
+  const coinIds = { BTC: "bitcoin", ETH: "ethereum", USDT_ERC20: "tether", USDT_TRC20: "tether", USDC_ERC20: "usd-coin", USDC_SOL: "usd-coin", SOL: "solana", LTC: "litecoin", XRP: "ripple", DOGE: "dogecoin", BNB_BEP20: "binancecoin", TRX: "tron" };
+  const id = coinIds[asset];
+  if (!id) throw new Error("No price source configured for " + asset + ".");
+  const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=" + encodeURIComponent(id) + "&vs_currencies=usd", { signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error("Live " + meta.symbol + "/USD quote unavailable.");
   const quote = await response.json();
-  const rate = String(quote?.data?.amount || "");
+  const rate = String(quote?.[id]?.usd || "");
   if (!/^\d+(\.\d+)?$/.test(rate) || Number(rate) <= 0) throw new Error("Invalid " + meta.symbol + "/USD quote.");
   return rate;
 }
