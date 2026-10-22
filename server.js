@@ -414,6 +414,44 @@ app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 })
     res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: asset === "BTC" ? "https://mempool.space" : "https://etherscan.io" }, accessToken });
   } catch (err) { console.error(err); res.status(500).json({ error: "Could not create order." }); }
 });
+app.post("/api/orders/guest-smtp", rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const domain = String(req.body?.domain || "").trim().toLowerCase();
+  const useCase = String(req.body?.useCase || "").trim();
+  const sku = String(req.body?.sku || "").trim().toLowerCase();
+  const asset = String(req.body?.asset || "").trim().toUpperCase();
+  if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid email address for the order receipt." });
+  if (!/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(domain)) return res.status(400).json({ error: "Enter the domain you control for SMTP setup." });
+  if (!["smtp", "smtpgrowth"].includes(sku)) return res.status(400).json({ error: "Choose an available SMTP setup package." });
+  if (useCase.length < 20 || useCase.length > 1000) return res.status(400).json({ error: "Describe the legitimate email use case in 20–1,000 characters." });
+  if (req.body?.permissionBased !== true) return res.status(400).json({ error: "Confirm that messages will go only to recipients who have opted in." });
+  if (!["BTC", "ETH"].includes(asset)) return res.status(400).json({ error: "Choose BTC or ETH for payment." });
+  try {
+    const product = await prisma.product.findFirst({ where: { sku, active: true } });
+    if (!product) return res.status(404).json({ error: "That SMTP package is not currently available." });
+    const config = assets[asset];
+    if (!config.address) return res.status(503).json({ error: asset + " receiving wallet is not configured." });
+    if (asset === "ETH" && !ETH_RPC_URL) return res.status(503).json({ error: "Ethereum payment verification is not configured. Choose Bitcoin or contact support." });
+    let baseAtomic;
+    try { baseAtomic = amountToAtomic(product.priceUsdCents, await getCryptoUsdRate(asset), config.decimals); }
+    catch { return res.status(503).json({ error: "A live " + asset + "/USD quote is unavailable. Please retry shortly." }); }
+    const displayUnit = 10n ** BigInt(config.decimals - config.displayDecimals);
+    const roundedBaseAtomic = (baseAtomic / displayUnit) * displayUnit;
+    const expectedAtomic = (roundedBaseAtomic + BigInt(crypto.randomInt(1, 1000)) * displayUnit).toString();
+    const expectedAmount = formatAtomic(expectedAtomic, config.decimals, config.displayDecimals);
+    const orderNumber = "SHR-SMTP-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
+    const accessToken = randomToken();
+    const intakeNote = ["PUBLIC SMTP ORDER — review before fulfillment.", "Domain: " + domain, "Use case: " + useCase, "Customer confirmed permission-based email only: yes.", "Capacity must ramp gradually after authentication and provider review; no instant full-capacity promise."].join("\n").slice(0, 1000);
+    const order = await prisma.order.create({ data: {
+      orderNumber, customerEmail: email, customerToken: accessToken, totalNgn: 0, totalUsdCents: product.priceUsdCents,
+      status: "AWAITING_PAYMENT", fulfillmentNote: intakeNote,
+      items: { create: [{ productSku: product.sku, productName: product.name, quantity: 1, unitPriceNgn: 0, unitPriceUsdCents: product.priceUsdCents }] },
+      payment: { create: { asset, address: config.address, expectedAtomic, expectedAmount, status: "AWAITING_PAYMENT" } }
+    }, include: { payment: true, items: true } });
+    res.status(201).json({ order: publicOrder(order), payment: { asset, address: config.address, expectedAmount, status: order.payment.status, explorer: asset === "BTC" ? "https://mempool.space" : "https://etherscan.io" }, accessToken, message: "Order created. The domain and use case must be reviewed, authenticated and ramped up gradually before sending." });
+  } catch (err) { console.error("Guest SMTP order failed:", err.message); res.status(500).json({ error: "Could not create the SMTP order. Please try again later." }); }
+});
+
 app.get("/api/account/orders", customerAuth, async (req, res) => {
   const orders = await prisma.order.findMany({
     where: { OR: [{ customerId: req.customer.id }, { customerEmail: req.customer.email }] },
