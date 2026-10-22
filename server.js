@@ -540,6 +540,31 @@ app.get("/api/account/orders", customerAuth, async (req, res) => {
   })) });
 });
 
+// A signed-in customer may only view an order attached to their own account/email.
+// Delivery notes are exposed only after fulfilment so internal payment-review notes stay private.
+app.get("/api/account/orders/:id", customerAuth, async (req, res) => {
+  const order = await prisma.order.findFirst({
+    where: { id: req.params.id, OR: [{ customerId: req.customer.id }, { customerEmail: req.customer.email }] },
+    include: {
+      items: { select: { productName: true, productSku: true, quantity: true, unitPriceUsdCents: true } },
+      payment: { select: { asset: true, status: true, expectedAmount: true, txHash: true, confirmations: true } }
+    }
+  });
+  if (!order) return res.status(404).json({ error: "Purchase not found for this account." });
+  res.json({
+    order: {
+      ...publicOrder(order),
+      fulfilledAt: order.fulfilledAt,
+      deliveryDetails: order.status === "FULFILLED" ? order.fulfillmentNote : null,
+      items: order.items,
+      payment: order.payment ? {
+        asset: order.payment.asset, status: order.payment.status, expectedAmount: order.payment.expectedAmount,
+        txHash: order.payment.txHash, confirmations: order.payment.confirmations
+      } : null
+    }
+  });
+});
+
 app.post("/api/orders/:id/transaction", rateLimit({ windowMs: 60_000, limit: 10 }), async (req, res) => {
   const token = req.get("x-order-token");
   const txHash = String(req.body.txHash || "").trim();
@@ -767,6 +792,7 @@ app.get("/media", (_req, res) => res.sendFile(path.join(__dirname, "media.html")
 app.get("/pricing", (_req, res) => res.sendFile(path.join(__dirname, "pricing.html")));
 app.get("/support", (_req, res) => res.sendFile(path.join(__dirname, "support.html")));
 app.get("/dashboard", (_req, res) => res.sendFile(path.join(__dirname, "dashboard.html")));
+app.get("/my-services", (_req, res) => res.sendFile(path.join(__dirname, "my-services.html")));
 app.get("/deposit", (_req, res) => res.sendFile(path.join(__dirname, "deposit.html")));
 app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));
 app.get("/admin", (_req, res) => res.sendFile(path.join(__dirname, "admin.html")));
