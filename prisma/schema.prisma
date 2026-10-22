@@ -25,6 +25,16 @@ enum OrderStatus {
 enum PaymentAsset {
   BTC
   ETH
+  USDT_ERC20
+  USDT_TRC20
+  USDC_ERC20
+  USDC_SOL
+  SOL
+  LTC
+  XRP
+  DOGE
+  BNB_BEP20
+  TRX
 }
 
 enum PaymentStatus {
@@ -159,4 +169,12 @@ model BennyInquiry {
   updatedAt DateTime @updatedAt
 
   @@index([status, createdAt])
+}
+
+
+model PaymentWallet {
+  asset     String   @id
+  address   String
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
 }
