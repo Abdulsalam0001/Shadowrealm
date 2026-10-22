@@ -376,9 +376,26 @@ app.post("/api/membership/invoice", customerAuth, rateLimit({ windowMs: 60_000, 
 });
 
 app.get("/api/products", customerAuth, async (req, res) => {
+  // Authenticated customers can see the complete live price list. Membership gates
+  // ordering, not catalogue visibility; the order endpoint independently enforces it.
   const fullMember = Boolean(req.customer.membershipPaidAt);
-  const products = await prisma.product.findMany({ where: { active: true }, orderBy: { sku: "asc" }, take: fullMember ? undefined : 2, select: { sku: true, name: true, description: true, priceUsdCents: true, fulfillmentMode: true } });
-  res.json({ products: products.map(p => ({ sku: p.sku, name: p.name, description: p.description, priceUsd: p.priceUsdCents / 100, fulfillmentMode: p.fulfillmentMode })), membershipRequired: !fullMember, membershipPaidAt: req.customer.membershipPaidAt || null });
+  const products = await prisma.product.findMany({
+    where: { active: true },
+    orderBy: { sku: "asc" },
+    select: { sku: true, name: true, description: true, priceUsdCents: true, fulfillmentMode: true }
+  });
+  res.json({
+    products: products.map(p => ({
+      sku: p.sku,
+      name: p.name,
+      description: p.description,
+      priceUsd: p.priceUsdCents / 100,
+      fulfillmentMode: p.fulfillmentMode,
+      locked: !fullMember
+    })),
+    membershipRequired: !fullMember,
+    membershipPaidAt: req.customer.membershipPaidAt || null
+  });
 });
 app.post("/api/orders", customerAuth, rateLimit({ windowMs: 60_000, limit: 12 }), async (req, res) => {
   if (!req.customer.membershipPaidAt) return res.status(403).json({ error: "Full catalogue ordering requires verified $20 Bitcoin membership." });
