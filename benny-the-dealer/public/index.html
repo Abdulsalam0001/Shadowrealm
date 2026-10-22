@@ -146,7 +146,7 @@
 <script>
 (function(){
  const guest=document.getElementById("bennyGuestServices"),catalog=document.getElementById("bennyMemberCatalogue"),status=document.getElementById("bennyCatalogStatus");
- const base="https://shadowrealm-yj6v.onrender.com";
+ const base="";
  const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const money=v=>Number(v||0).toLocaleString("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2});
  fetch(base+"/api/auth/session",{credentials:"include",headers:{Accept:"application/json"}}).then(r=>r.ok?r.json():Promise.reject()).then(async session=>{
@@ -157,7 +157,7 @@
    guest.hidden=true;catalog.hidden=false;
    status.textContent=full?"Verified member · live catalogue loaded. Choose a service to start an order.":"Signed in · complete database price list shown. Products are muted until your membership deposit is verified.";
    catalog.innerHTML=(data.products||[]).map((p,i)=>{
-     const locked=!full,route=p.sku.includes("rdp")?"/servers":p.sku.includes("cpanel")?"/hosting":p.sku.includes("smtp")?"/email":p.sku==="anti-red-panel"?"/media":"/pricing?sku="+encodeURIComponent(p.sku);
+     const locked=!full,route="/pricing?sku="+encodeURIComponent(p.sku);
      return '<article class="benny-price-card '+(locked?"catalog-locked":"")+'" style="'+(locked?"opacity:.5;filter:saturate(.45);border-style:dashed;":"")+'"><div class="benny-price-meta"><span>'+String(i+1).padStart(2,"0")+' / '+esc(p.sku).toUpperCase()+'</span><span>'+(locked?"LOCKED UNTIL VERIFIED":"AVAILABLE TO ORDER")+'</span></div><h3>'+esc(p.name)+'</h3><p>'+esc(p.description||"Service details available in the member workspace.")+'</p><div class="benny-price-bottom"><strong>'+money(p.priceUsd)+'</strong><a href="'+base+(locked?"/deposit":route)+'">'+(locked?"Unlock to order ↗":"View &amp; order ↗")+'</a></div></article>';
    }).join("");
  }).catch(()=>{status.textContent="The live catalogue could not be loaded. Sign in or open the Shadowrealm catalogue to view services and continue ordering.";});
